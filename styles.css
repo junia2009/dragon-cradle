@@ -179,6 +179,50 @@ html, body {
 
 .hatch-bottom { width: 100%; max-width: 400px; }
 
+/* ---- 孵化タイミングUI ---- */
+.hatch-timing-bar-wrap {
+  position: relative;
+  width: 260px;
+  height: 18px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 9px;
+  overflow: hidden;
+  margin: 0.4rem 0;
+}
+.hatch-timing-bar {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 6px;
+  background: #fff;
+  border-radius: 3px;
+  box-shadow: 0 0 8px #fff;
+  transition: left 0.05s linear;
+}
+.hatch-timing-zone {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%;
+  width: 52px;
+  transform: translateX(-50%);
+  background: rgba(123,47,255,0.45);
+  border-radius: 4px;
+  border: 1px solid rgba(123,47,255,0.8);
+  pointer-events: none;
+}
+.hatch-tap-result {
+  font-family: var(--font-title);
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-height: 2rem;
+  transition: opacity 0.3s ease;
+  text-shadow: 0 0 12px currentColor;
+}
+.tap-perfect { color: #FFD700; }
+.tap-great   { color: #FF4500; }
+.tap-normal  { color: var(--text-dim); }
+
 /* ============================================================
    育成画面 UI
    ============================================================ */
@@ -281,6 +325,14 @@ html, body {
   max-width: 420px;
 }
 
+.dragon-type-label {
+  font-family: var(--font-title);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
 /* ============================================================
    バトル画面 UI
    ============================================================ */
@@ -372,6 +424,105 @@ html, body {
 .battle-log-line {
   font-size: 0.78rem;
   line-height: 1.5;
+}
+
+/* ---- バトルコマンド ---- */
+.battle-commands {
+  position: absolute;
+  bottom: calc(3.8rem + max(0.3rem, env(safe-area-inset-bottom, 0px)));
+  left: 1rem;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 200px;
+  background: rgba(7,11,20,0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+}
+.battle-commands.hidden { display: none; }
+
+.enemy-intent {
+  font-family: var(--font-title);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-align: center;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.command-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cmd-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: var(--font-title);
+  font-size: 0.78rem;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  letter-spacing: 0.03em;
+}
+.cmd-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.13);
+  border-color: rgba(255,255,255,0.35);
+  transform: translateX(2px);
+}
+.cmd-special {
+  border-color: rgba(123,47,255,0.5);
+  color: #c084fc;
+}
+.cmd-special:hover:not(:disabled) { border-color: #7B2FFF; }
+.cmd-guard {
+  border-color: rgba(0,207,255,0.4);
+  color: #7dd3fc;
+}
+.cmd-guard:hover { border-color: #00CFFF; }
+
+/* MP バー */
+.mp-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-top: 0.35rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+.mp-label {
+  font-family: var(--font-title);
+  font-size: 0.58rem;
+  color: #c084fc;
+  flex-shrink: 0;
+}
+.mp-bar-bg {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.mp-bar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #7B2FFF, #c084fc);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 6px #7B2FFF;
+}
+.mp-text {
+  font-family: var(--font-title);
+  font-size: 0.58rem;
+  color: #c084fc;
+  flex-shrink: 0;
 }
 
 .battle-result {

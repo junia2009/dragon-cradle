@@ -28,6 +28,21 @@ const HATCH_IDLE   = 6000;  // 放置孵化インターバル(ms) + 1pt
 const RAISE_IDLE   = 60000; // 放置成長インターバル(ms) + 1pt
 const TRAIN_CD     = 30000; // トレーニングクールダウン(ms)
 
+// 孵化タイミング
+const HATCH_TIMING_WINDOW = 0.18; // ±この範囲がPERFECT（0〜1の正規化位置）
+
+// バトル MP
+const MP_MAX        = 5;
+const SPECIAL_COST  = 3;
+
+// ドラゴンタイプ（育成傾向で決まる）
+const DRAGON_TYPES = {
+  balanced: { label: 'バランス型',   special: 'ドラゴンブレス',  color: null },
+  attacker: { label: 'アタッカー型', special: 'バーサークブロー', color: '#FF4500' },
+  tank:     { label: 'タンク型',    special: 'アイアンウォール', color: '#00CFFF' },
+  speedster:{ label: 'スピード型',  special: 'サンダーラッシュ', color: '#FFD700' },
+};
+
 // ============================================================
 // 状態
 // ============================================================
@@ -42,6 +57,11 @@ let state = {
   totalWin: 0,
   battleLevel: 1,
   lastSaveTime: Date.now(),
+  // 訓練カウント（個性に影響）
+  trainCount: { atk: 0, def: 0, spd: 0 },
+  dragonType: 'balanced',
+  // バトルMP
+  mp: MP_MAX,
 };
 
 // セーブデータキー
@@ -191,11 +211,12 @@ function initHatchScene(attr) {
     if (state.stage === 'egg') addHatchPt(1);
   }, HATCH_IDLE);
 
-  // クリックで孵化促進
+  // クリックで孵化促進（タイミング判定）
   canvas.onclick = () => {
     if (state.stage !== 'egg') return;
-    addHatchPt(2);
-    shakeEgg(0.3);
+    const pts = evalHatchTiming();
+    addHatchPt(pts);
+    shakeEgg(pts >= 8 ? 0.6 : 0.3);
   };
 
   window.addEventListener('resize', () => {
@@ -271,6 +292,33 @@ function buildEgg(attr) {
 let eggShake = 0;
 function shakeEgg(intensity) { eggShake = intensity; }
 
+// ---- タイミング判定 ----
+// 卵の揺れ量(swayBase = sin(t*1.6))のピーク時にタップするとPERFECT
+function evalHatchTiming() {
+  const t = performance.now() * 0.001;
+  const sway = Math.abs(Math.sin(t * 1.6)); // 0〜1、1がピーク
+  let pts, label, cls;
+  if (sway >= 0.85) {
+    pts = 10; label = 'PERFECT!! ✨'; cls = 'tap-perfect';
+  } else if (sway >= 0.55) {
+    pts = 5;  label = 'GREAT! 🔥';    cls = 'tap-great';
+  } else {
+    pts = 2;  label = 'TAP';           cls = 'tap-normal';
+  }
+  showTapResult(label, cls);
+  return pts;
+}
+
+function showTapResult(label, cls) {
+  const el = document.getElementById('hatch-tap-result');
+  if (!el) return;
+  el.textContent = label;
+  el.className = 'hatch-tap-result ' + cls;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 700);
+}
+
 // ひびをゲージに応じて表示
 function updateCracks(ratio) {
   if (ratio < 0.8) return;
@@ -342,6 +390,16 @@ function animateHatch() {
     eggGroup.position.y = Math.sin(t * 0.9) * 0.08;
     eggShake *= 0.88;
     eggGroup.rotation.y = t * 0.2;
+  }
+
+  // 孵化タイミングバーを卵の揺れに同期して動かす
+  const barEl = document.getElementById('hatch-timing-bar');
+  if (barEl) {
+    // sin(t*1.6) を 0〜1 に正規化 → バーのleft位置に変換
+    const norm = (Math.sin(t * 1.6) + 1) / 2; // 0〜1
+    const wrapW = 260;
+    const barW  = 6;
+    barEl.style.left = (norm * (wrapW - barW)) + 'px';
   }
 
   // パーティクル更新
@@ -664,16 +722,52 @@ function doAction(type) {
 
   let growPt = 0;
   switch (type) {
-    case 'feed':      state.stats.hp   += 5; growPt = 1; break;
-    case 'train-atk': state.stats.atk  += 2; growPt = 3; break;
-    case 'train-def': state.stats.def  += 2; growPt = 3; break;
-    case 'train-spd': state.stats.spd  += 2; growPt = 3; break;
+    case 'feed':
+      state.stats.hp += 5;
+      growPt = 1;
+      break;
+    case 'train-atk':
+      state.stats.atk += 2;
+      state.trainCount.atk++;
+      growPt = 3;
+      break;
+    case 'train-def':
+      state.stats.def += 2;
+      state.trainCount.def++;
+      growPt = 3;
+      break;
+    case 'train-spd':
+      state.stats.spd += 2;
+      state.trainCount.spd++;
+      growPt = 3;
+      break;
   }
 
+  updateDragonType();
   showActionFeedback(getActionEmoji(type));
   addGrowthPt(growPt);
   updateRaiseUI();
   saveGame();
+}
+
+function updateDragonType() {
+  const { atk, def, spd } = state.trainCount;
+  const total = atk + def + spd;
+  if (total < 3) { state.dragonType = 'balanced'; return; }
+  const max = Math.max(atk, def, spd);
+  const threshold = total * 0.5;
+  if (max < threshold) { state.dragonType = 'balanced'; }
+  else if (atk === max) { state.dragonType = 'attacker'; }
+  else if (def === max) { state.dragonType = 'tank'; }
+  else                  { state.dragonType = 'speedster'; }
+  updateTypeLabelUI();
+}
+
+function updateTypeLabelUI() {
+  const el = document.getElementById('dragon-type-label');
+  if (!el) return;
+  const t = DRAGON_TYPES[state.dragonType];
+  el.textContent = `${t.label} ／ 必殺技：${t.special}`;
 }
 
 function getActionEmoji(type) {
@@ -751,6 +845,7 @@ function updateRaiseUI() {
     if (fill) fill.style.width = '100%';
     if (progress) progress.textContent = '成体に進化！';
   }
+  updateTypeLabelUI();
 }
 
 // ---- 育成シーンアニメーション ----
@@ -844,16 +939,21 @@ function initBattleScene(attr) {
     turn: 0,
     running: true,
     streak: state.streak,
+    playerGuarding: false,
+    enemyIntent: null,    // 敵の予告行動
   };
+  state.mp = MP_MAX;
 
   updateBattleUI();
+  updateMpUI();
   document.getElementById('battle-result').classList.add('hidden');
+  document.getElementById('battle-commands').classList.add('hidden');
   clearBattleLog();
 
   animateBattle();
 
   // バトル開始（少し待ってから）
-  setTimeout(() => runBattleTurn(), 1000);
+  setTimeout(() => startTurn(), 800);
 
   window.addEventListener('resize', () => {
     if (!battleRenderer) return;
@@ -887,47 +987,130 @@ function getAttrMultiplier(attackerAttr, defenderAttr) {
   return 1.0;
 }
 
-function runBattleTurn() {
+// ---- ターン開始：コマンド選択を待つ ----
+function startTurn() {
   if (!battleState || !battleState.running) return;
+
+  // 敵の行動を予告決定
+  battleState.enemyIntent = decideEnemyIntent();
+  battleState.playerGuarding = false;
+
+  // コマンドUI表示
+  const cmdEl = document.getElementById('battle-commands');
+  cmdEl.classList.remove('hidden');
+  updateEnemyIntentUI();
+  updateMpUI();
+  setupCommandButtons();
+}
+
+function decideEnemyIntent() {
+  // 敵が「強攻撃」か「通常攻撃」かをランダムに予告
+  const r = Math.random();
+  if (r < 0.3 && battleState.turn % 3 === 2) return 'heavy'; // 3ターンに1回強攻撃
+  return 'normal';
+}
+
+function updateEnemyIntentUI() {
+  const el = document.getElementById('enemy-intent');
+  if (!el) return;
+  if (battleState.enemyIntent === 'heavy') {
+    el.textContent = '⚠️ 敵が力をためている…';
+    el.style.color  = '#ff5252';
+  } else {
+    el.textContent = '敵が攻撃を狙っている';
+    el.style.color  = '#7986cb';
+  }
+}
+
+function setupCommandButtons() {
+  const type = DRAGON_TYPES[state.dragonType];
+  const spEl = document.getElementById('cmd-special');
+  const costEl = document.getElementById('mp-cost-label');
+  spEl.textContent = `✨ ${type.special}`;
+  if (costEl) costEl.textContent = ` (MP${SPECIAL_COST})`;
+
+  const canSpecial = state.mp >= SPECIAL_COST;
+  spEl.disabled = !canSpecial;
+  spEl.style.opacity = canSpecial ? '1' : '0.35';
+
+  document.getElementById('cmd-attack').onclick   = () => executeCommand('attack');
+  document.getElementById('cmd-special').onclick  = () => { if (canSpecial) executeCommand('special'); };
+  document.getElementById('cmd-guard').onclick    = () => executeCommand('guard');
+}
+
+function executeCommand(cmd) {
+  if (!battleState || !battleState.running) return;
+  document.getElementById('battle-commands').classList.add('hidden');
 
   const ps = state.stats;
   const es = battleState.enemyStats;
 
-  // 先攻判定
-  const playerFirst = ps.spd >= es.spd;
+  // --- プレイヤー行動 ---
+  if (cmd === 'guard') {
+    battleState.playerGuarding = true;
+    addBattleLog('🛡️ 守りの姿勢を取った！');
+    // MPを1回復
+    state.mp = Math.min(MP_MAX, state.mp + 1);
+  } else if (cmd === 'attack') {
+    const mult = getAttrMultiplier(state.attr, battleState.enemyAttr);
+    const dmg  = Math.max(1, Math.floor((ps.atk - es.def * 0.5) * mult));
+    battleState.enemyHP = Math.max(0, battleState.enemyHP - dmg);
+    const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
+    addBattleLog(`▶ ${dmg}ダメージ${multText}`);
+    flashDragon(enemyDragonGroup);
+    state.mp = Math.min(MP_MAX, state.mp + 1);
+  } else if (cmd === 'special') {
+    state.mp -= SPECIAL_COST;
+    const mult = getAttrMultiplier(state.attr, battleState.enemyAttr);
+    const dmg  = Math.max(1, Math.floor((ps.atk * 2.2 - es.def * 0.3) * mult));
+    battleState.enemyHP = Math.max(0, battleState.enemyHP - dmg);
+    const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
+    const spName = DRAGON_TYPES[state.dragonType].special;
+    addBattleLog(`✨ ${spName}！ ${dmg}ダメージ！${multText}`);
+    flashDragon(enemyDragonGroup);
+    flashDragon(playerDragonGroup); // 必殺技自身も光る
+  }
 
-  const doAttack = (isPlayer) => {
-    if (isPlayer) {
-      const mult = getAttrMultiplier(state.attr, battleState.enemyAttr);
-      const dmg = Math.max(1, Math.floor((ps.atk - es.def) * mult));
-      battleState.enemyHP = Math.max(0, battleState.enemyHP - dmg);
-      const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
-      addBattleLog(`▶ ${dmg}ダメージ${multText}`);
-      flashDragon(enemyDragonGroup);
-    } else {
-      const mult = getAttrMultiplier(battleState.enemyAttr, state.attr);
-      const dmg = Math.max(1, Math.floor((es.atk - ps.def) * mult));
-      battleState.playerHP = Math.max(0, battleState.playerHP - dmg);
-      const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
-      addBattleLog(`◀ ${dmg}ダメージ${multText}`);
-      flashDragon(playerDragonGroup);
-    }
-    updateBattleUI();
-  };
-
-  doAttack(playerFirst);
-
-  // 勝敗チェック
+  updateBattleUI();
+  updateMpUI();
   if (checkBattleEnd()) return;
 
-  setTimeout(() => {
-    doAttack(!playerFirst);
-    if (!checkBattleEnd()) {
-      battleState.turn++;
-      setTimeout(runBattleTurn, 1200);
-    }
-  }, 900);
+  // --- 少し間を置いて敵行動 ---
+  setTimeout(() => enemyAction(), 700);
 }
+
+function enemyAction() {
+  if (!battleState || !battleState.running) return;
+  const es = battleState.enemyStats;
+  const ps = state.stats;
+
+  let dmg;
+  if (battleState.enemyIntent === 'heavy') {
+    // 強攻撃
+    const raw = Math.max(1, Math.floor(es.atk * 1.8 - ps.def * 0.3));
+    dmg = battleState.playerGuarding ? Math.ceil(raw * 0.4) : raw;
+    const guardText = battleState.playerGuarding ? ' (ガード！)' : '';
+    addBattleLog(`◀ 強攻撃！ ${dmg}ダメージ${guardText}`);
+  } else {
+    const mult = getAttrMultiplier(battleState.enemyAttr, state.attr);
+    const raw  = Math.max(1, Math.floor((es.atk - ps.def * 0.5) * mult));
+    dmg = battleState.playerGuarding ? Math.ceil(raw * 0.4) : raw;
+    const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
+    const guardText = battleState.playerGuarding ? ' (ガード！)' : '';
+    addBattleLog(`◀ ${dmg}ダメージ${multText}${guardText}`);
+  }
+  battleState.playerHP = Math.max(0, battleState.playerHP - dmg);
+  flashDragon(playerDragonGroup);
+  updateBattleUI();
+
+  if (checkBattleEnd()) return;
+
+  // 次のターンへ
+  battleState.turn++;
+  setTimeout(() => startTurn(), 600);
+}
+
+// (旧runBattleTurnは削除 → startTurn/executeCommandに統合)
 
 function checkBattleEnd() {
   if (battleState.playerHP <= 0) {
@@ -973,6 +1156,7 @@ function showBattleResult(win, score) {
   const scoreEl  = document.getElementById('battle-result-score');
 
   resultEl.classList.remove('hidden');
+  document.getElementById('battle-commands').classList.add('hidden');
   titleEl.textContent = win ? '🏆 勝利！' : '💀 敗北';
   titleEl.style.color = win ? '#69f0ae' : '#ff5252';
   scoreEl.textContent = win ? `+${score} pt` : 'スコア変化なし';
@@ -1001,6 +1185,13 @@ function updateBattleUI() {
   document.getElementById('battle-enemy-hp-bar').style.width  = (eRatio * 100) + '%';
   document.getElementById('battle-player-hp-text').textContent = `${battleState.playerHP} / ${battleState.playerMaxHP}`;
   document.getElementById('battle-enemy-hp-text').textContent  = `${battleState.enemyHP} / ${battleState.enemyMaxHP}`;
+}
+
+function updateMpUI() {
+  const bar  = document.getElementById('mp-bar');
+  const text = document.getElementById('mp-text');
+  if (bar)  bar.style.width  = (state.mp / MP_MAX * 100) + '%';
+  if (text) text.textContent = `${state.mp}/${MP_MAX}`;
 }
 
 function addBattleLog(msg) {
@@ -1075,6 +1266,8 @@ function saveGame() {
     streak: state.streak,
     totalWin: state.totalWin,
     battleLevel: state.battleLevel,
+    trainCount: state.trainCount,
+    dragonType: state.dragonType,
     savedAt: Date.now(),
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1141,6 +1334,8 @@ document.getElementById('btn-back-from-record').addEventListener('click', () => 
       streak: saved.streak || 0,
       totalWin: saved.totalWin || 0,
       battleLevel: saved.battleLevel || 1,
+      trainCount: saved.trainCount || { atk: 0, def: 0, spd: 0 },
+      dragonType: saved.dragonType || 'balanced',
     });
 
     // 放置中の成長を計算

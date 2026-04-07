@@ -65,7 +65,12 @@
       <div class="hatch-top">
         <h2 id="hatch-attr-label" class="attr-label"></h2>
       </div>
-      <div class="hatch-center-hint">クリックで孵化を促進！</div>
+      <div class="hatch-center-hint" id="hatch-tap-hint">タイミングよくタップ！</div>
+      <div id="hatch-timing-bar-wrap" class="hatch-timing-bar-wrap">
+        <div id="hatch-timing-bar" class="hatch-timing-bar"></div>
+        <div id="hatch-timing-zone" class="hatch-timing-zone"></div>
+      </div>
+      <div id="hatch-tap-result" class="hatch-tap-result"></div>
       <div class="hatch-bottom">
         <div class="gauge-wrap">
           <div class="gauge-label">孵化ゲージ</div>
@@ -121,11 +126,12 @@
         </div>
       </div>
       <div class="action-buttons">
-        <button class="action-btn" id="btn-feed">🍖 えさをあげる</button>
-        <button class="action-btn" id="btn-train-atk">⚔️ 攻撃トレーニング</button>
-        <button class="action-btn" id="btn-train-def">🛡️ 守りトレーニング</button>
-        <button class="action-btn" id="btn-train-spd">🏃 走りトレーニング</button>
+        <button class="action-btn" id="btn-feed">🍖 えさ</button>
+        <button class="action-btn" id="btn-train-atk">⚔️ 攻撃鍛錬</button>
+        <button class="action-btn" id="btn-train-def">🛡️ 守り鍛錬</button>
+        <button class="action-btn" id="btn-train-spd">🏃 速さ鍛錬</button>
       </div>
+      <div id="dragon-type-label" class="dragon-type-label"></div>
       <button class="battle-btn" id="btn-go-battle">⚔️ バトルに出撃！</button>
       <div id="action-feedback" class="action-feedback"></div>
     </div>
@@ -153,6 +159,20 @@
         </div>
       </div>
       <div id="battle-log" class="battle-log"></div>
+      <!-- コマンド選択UI -->
+      <div id="battle-commands" class="battle-commands hidden">
+        <div id="enemy-intent" class="enemy-intent"></div>
+        <div class="command-buttons">
+          <button class="cmd-btn" id="cmd-attack">⚔️ 攻撃</button>
+          <button class="cmd-btn cmd-special" id="cmd-special">✨ 必殺技<span id="mp-cost-label"></span></button>
+          <button class="cmd-btn cmd-guard" id="cmd-guard">🛡️ 守り</button>
+        </div>
+        <div id="mp-bar-wrap" class="mp-bar-wrap">
+          <span class="mp-label">MP</span>
+          <div class="mp-bar-bg"><div id="mp-bar" class="mp-bar"></div></div>
+          <span id="mp-text" class="mp-text"></span>
+        </div>
+      </div>
       <div id="battle-result" class="battle-result hidden">
         <div id="battle-result-title" class="result-title"></div>
         <div id="battle-result-score" class="result-score"></div>
