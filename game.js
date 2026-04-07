@@ -26,10 +26,12 @@ const HATCH_MAX    = 100;   // 孵化ゲージ最大
 const RAISE_MAX    = 50;    // 成長ゲージ最大（幼体→成体）
 const HATCH_IDLE   = 6000;  // 放置孵化インターバル(ms) + 1pt
 const RAISE_IDLE   = 60000; // 放置成長インターバル(ms) + 1pt
-const TRAIN_CD     = 30000; // トレーニングクールダウン(ms)
-
 // 孵化タイミング
 const HATCH_TIMING_WINDOW = 0.18; // ±この範囲がPERFECT（0〜1の正規化位置）
+
+// スタミナ
+const STA_MAX        = 5;
+const STA_RECOVER_MS = 90000; // 1スタミナ回復に90秒
 
 // バトル MP
 const MP_MAX        = 5;
@@ -62,6 +64,8 @@ let state = {
   dragonType: 'balanced',
   // バトルMP
   mp: MP_MAX,
+  // スタミナ
+  stamina: STA_MAX,
 };
 
 // セーブデータキー
@@ -424,7 +428,7 @@ let raiseScene, raiseCamera, raiseRenderer, raiseAnimId;
 let dragonGroup = null;
 let attrEffectParticles = [];
 let raiseIdleTimer = null;
-let trainCooldown = {};
+let staRecoverTimer = null;
 
 function initRaiseScene(attr) {
   const canvas = document.getElementById('raise-canvas');
@@ -463,13 +467,21 @@ function initRaiseScene(attr) {
   updateRaiseUI();
   animateRaise();
 
-  // 放置タイマー
+  // 放置タイマー（成長）
   clearInterval(raiseIdleTimer);
   raiseIdleTimer = setInterval(() => {
-    if (state.stage === 'baby') {
-      addGrowthPt(1);
-    }
+    if (state.stage === 'baby') addGrowthPt(1);
   }, RAISE_IDLE);
+
+  // スタミナ回復タイマー
+  clearInterval(staRecoverTimer);
+  staRecoverTimer = setInterval(() => {
+    if (state.stamina < STA_MAX) {
+      state.stamina = Math.min(STA_MAX, state.stamina + 1);
+      updateStaminaUI();
+      saveGame();
+    }
+  }, STA_RECOVER_MS);
 
   setupRaiseButtons(attr);
   updateRaiseUI();
@@ -711,43 +723,68 @@ function setupRaiseButtons(attr) {
 }
 
 function doAction(type) {
-  const now = Date.now();
-  const cd = trainCooldown[type] || 0;
-  if (now - cd < TRAIN_CD) {
-    const remaining = Math.ceil((TRAIN_CD - (now - cd)) / 1000);
-    showActionFeedback(`あと${remaining}秒待ってね`);
+  if (state.stamina <= 0) {
+    showActionFeedback('💤 スタミナ切れ！');
     return;
   }
-  trainCooldown[type] = now;
+  state.stamina--;
 
+  const mult = rollTrainingMult();
   let growPt = 0;
+  let msg = '';
+
   switch (type) {
     case 'feed':
-      state.stats.hp += 5;
+      state.stats.hp += 8 * mult;
       growPt = 1;
+      msg = mult >= 3 ? '🍖 大喜び！ ×3!!' : mult >= 2 ? '🍖 おいし！ ×2' : '🍖 もぐもぐ';
       break;
     case 'train-atk':
-      state.stats.atk += 2;
+      state.stats.atk += 2 * mult;
       state.trainCount.atk++;
       growPt = 3;
+      msg = mult >= 3 ? '⚔️ CRITICAL!! ×3' : mult >= 2 ? '⚔️ ATK UP ×2' : '⚔️ ATK UP';
       break;
     case 'train-def':
-      state.stats.def += 2;
+      state.stats.def += 2 * mult;
       state.trainCount.def++;
       growPt = 3;
+      msg = mult >= 3 ? '🛡️ CRITICAL!! ×3' : mult >= 2 ? '🛡️ DEF UP ×2' : '🛡️ DEF UP';
       break;
     case 'train-spd':
-      state.stats.spd += 2;
+      state.stats.spd += 2 * mult;
       state.trainCount.spd++;
       growPt = 3;
+      msg = mult >= 3 ? '🏃 CRITICAL!! ×3' : mult >= 2 ? '🏃 SPD UP ×2' : '🏃 SPD UP';
       break;
   }
 
   updateDragonType();
-  showActionFeedback(getActionEmoji(type));
+  showActionFeedback(msg, mult >= 3);
   addGrowthPt(growPt);
   updateRaiseUI();
   saveGame();
+}
+
+function rollTrainingMult() {
+  const r = Math.random();
+  if (r < 0.15) return 3; // 15%: ×3 CRITICAL
+  if (r < 0.40) return 2; // 25%: ×2 NICE
+  return 1;               // 60%: 通常
+}
+
+function updateStaminaUI() {
+  const wrap = document.getElementById('stamina-dots');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  for (let i = 0; i < STA_MAX; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'sta-dot' + (i < state.stamina ? ' filled' : '');
+    wrap.appendChild(dot);
+  }
+  const timeEl = document.getElementById('sta-recover-time');
+  if (!timeEl) return;
+  timeEl.textContent = state.stamina >= STA_MAX ? '' : `(${Math.ceil(STA_RECOVER_MS / 1000)}s/回復)`;
 }
 
 function updateDragonType() {
@@ -770,20 +807,18 @@ function updateTypeLabelUI() {
   el.textContent = `${t.label} ／ 必殺技：${t.special}`;
 }
 
-function getActionEmoji(type) {
-  return { feed: '🍖 おいしい！', 'train-atk': '⚔️ ATK UP!', 'train-def': '🛡️ DEF UP!', 'train-spd': '🏃 SPD UP!' }[type] || '';
-}
-
 let feedbackTimeout = null;
-function showActionFeedback(msg) {
-  const hint = document.querySelector('.hatch-center-hint') || document.createElement('div');
-  // 育成画面用フィードバック（簡易）
+function showActionFeedback(msg, isCritical = false) {
   const el = document.getElementById('action-feedback');
   if (!el) return;
   el.textContent = msg;
   el.style.opacity = '1';
+  el.classList.toggle('feedback-critical', isCritical);
   clearTimeout(feedbackTimeout);
-  feedbackTimeout = setTimeout(() => { el.style.opacity = '0'; }, 1200);
+  feedbackTimeout = setTimeout(() => {
+    el.style.opacity = '0';
+    el.classList.remove('feedback-critical');
+  }, 1500);
 }
 
 function addGrowthPt(pt) {
@@ -846,6 +881,7 @@ function updateRaiseUI() {
     if (progress) progress.textContent = '成体に進化！';
   }
   updateTypeLabelUI();
+  updateStaminaUI();
 }
 
 // ---- 育成シーンアニメーション ----
@@ -1268,6 +1304,7 @@ function saveGame() {
     battleLevel: state.battleLevel,
     trainCount: state.trainCount,
     dragonType: state.dragonType,
+    stamina: state.stamina,
     savedAt: Date.now(),
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1336,7 +1373,13 @@ document.getElementById('btn-back-from-record').addEventListener('click', () => 
       battleLevel: saved.battleLevel || 1,
       trainCount: saved.trainCount || { atk: 0, def: 0, spd: 0 },
       dragonType: saved.dragonType || 'balanced',
+      stamina: saved.stamina ?? STA_MAX,
     });
+    // 放置中のスタミナ回復
+    if (saved.savedAt && state.stamina < STA_MAX) {
+      const recovered = Math.floor((Date.now() - saved.savedAt) / STA_RECOVER_MS);
+      state.stamina = Math.min(STA_MAX, state.stamina + recovered);
+    }
 
     // 放置中の成長を計算
     if (saved.savedAt) {

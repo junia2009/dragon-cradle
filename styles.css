@@ -333,6 +333,64 @@ html, body {
   text-align: center;
 }
 
+/* スタミナドット */
+.stamina-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.sta-label {
+  font-family: var(--font-title);
+  font-size: 0.62rem;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.stamina-dots {
+  display: flex;
+  gap: 0.3rem;
+}
+.sta-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.sta-dot.filled {
+  background: var(--current-attr);
+  box-shadow: 0 0 7px var(--current-attr);
+  border-color: transparent;
+}
+.sta-recover-time {
+  font-family: var(--font-title);
+  font-size: 0.55rem;
+  color: var(--text-dim);
+}
+
+/* アクションフィードバック */
+.action-feedback {
+  font-family: var(--font-title);
+  font-size: 1rem;
+  color: var(--current-attr);
+  text-shadow: 0 0 10px var(--current-attr);
+  min-height: 1.5rem;
+  text-align: center;
+  transition: opacity 0.4s ease;
+  letter-spacing: 0.05em;
+}
+.action-feedback.feedback-critical {
+  font-size: 1.3rem;
+  color: #FFD700;
+  text-shadow: 0 0 16px #FFD700, 0 0 30px #FF8800;
+  animation: criticalPop 0.25s ease both;
+}
+@keyframes criticalPop {
+  0%   { transform: scale(0.7); }
+  60%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
 /* ============================================================
    バトル画面 UI
    ============================================================ */
@@ -738,18 +796,6 @@ html, body {
 }
 
 .fade-in { animation: fadeIn 0.5s ease both; }
-
-/* アクションフィードバック */
-.action-feedback {
-  font-family: var(--font-title);
-  font-size: 1rem;
-  color: var(--current-attr);
-  text-shadow: 0 0 10px var(--current-attr);
-  min-height: 1.5rem;
-  text-align: center;
-  transition: opacity 0.4s ease;
-  letter-spacing: 0.05em;
-}
 
 /* ============================================================
    Safe Area サポート（iPhone ノッチ / Dynamic Island / ホームバー）
