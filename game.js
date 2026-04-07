@@ -827,7 +827,7 @@ function initBattleScene(attr) {
   // 敵ドラゴン（右）
   enemyDragonGroup = buildAdultDragon(enemyAttr);
   enemyDragonGroup.position.set(4, 0, 0);
-  enemyDragonGroup.rotation.y = -0.6 + Math.PI;
+  enemyDragonGroup.rotation.y = -0.6;  // 左向き（プレイヤー方向）
   enemyDragonGroup.scale.setScalar(0.7);
   battleScene.add(enemyDragonGroup);
 
