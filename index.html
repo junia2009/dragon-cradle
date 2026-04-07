@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dragon Cradle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ========== 属性選択画面 ========== -->
+  <div id="screen-select" class="screen active">
+    <div class="screen-select-inner">
+      <h1 class="game-title">DRAGON<br><span>CRADLE</span></h1>
+      <p class="subtitle">卵の属性を選んでください</p>
+      <div class="attribute-cards">
+        <button class="attr-card" data-attr="fire">
+          <div class="attr-icon">🔥</div>
+          <div class="attr-name">炎</div>
+          <div class="attr-type">アタッカー型</div>
+          <div class="attr-stats">HP:80 / ATK:25 / DEF:10 / SPD:15</div>
+        </button>
+        <button class="attr-card" data-attr="ice">
+          <div class="attr-icon">❄️</div>
+          <div class="attr-name">氷</div>
+          <div class="attr-type">タンク型</div>
+          <div class="attr-stats">HP:100 / ATK:15 / DEF:25 / SPD:10</div>
+        </button>
+        <button class="attr-card" data-attr="thunder">
+          <div class="attr-icon">⚡</div>
+          <div class="attr-name">雷</div>
+          <div class="attr-type">スピード型</div>
+          <div class="attr-stats">HP:70 / ATK:20 / DEF:8 / SPD:22</div>
+        </button>
+        <button class="attr-card" data-attr="dark">
+          <div class="attr-icon">🌑</div>
+          <div class="attr-name">闇</div>
+          <div class="attr-type">バランス型</div>
+          <div class="attr-stats">HP:90 / ATK:20 / DEF:20 / SPD:12</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 孵化画面 ========== -->
+  <div id="screen-hatch" class="screen">
+    <canvas id="hatch-canvas"></canvas>
+    <div class="hatch-ui">
+      <div class="hatch-top">
+        <h2 id="hatch-attr-label" class="attr-label"></h2>
+      </div>
+      <div class="hatch-center-hint">クリックで孵化を促進！</div>
+      <div class="hatch-bottom">
+        <div class="gauge-wrap">
+          <div class="gauge-label">孵化ゲージ</div>
+          <div class="gauge-bar">
+            <div id="hatch-gauge-fill" class="gauge-fill"></div>
+          </div>
+          <div id="hatch-gauge-text" class="gauge-text">0 / 100</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 育成画面 ========== -->
+  <div id="screen-raise" class="screen">
+    <canvas id="raise-canvas"></canvas>
+    <div class="raise-ui">
+      <div class="raise-top">
+        <h2 id="raise-attr-label" class="attr-label"></h2>
+        <div id="raise-stage-label" class="stage-label"></div>
+      </div>
+      <div class="stats-panel">
+        <div class="stat-row">
+          <span class="stat-name">HP</span>
+          <div class="stat-bar-wrap"><div id="stat-hp-bar" class="stat-bar"></div></div>
+          <span id="stat-hp-val" class="stat-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">ATK</span>
+          <div class="stat-bar-wrap"><div id="stat-atk-bar" class="stat-bar"></div></div>
+          <span id="stat-atk-val" class="stat-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">DEF</span>
+          <div class="stat-bar-wrap"><div id="stat-def-bar" class="stat-bar"></div></div>
+          <span id="stat-def-val" class="stat-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">SPD</span>
+          <div class="stat-bar-wrap"><div id="stat-spd-bar" class="stat-bar"></div></div>
+          <span id="stat-spd-val" class="stat-val">0</span>
+        </div>
+      </div>
+      <div class="growth-gauge-wrap">
+        <div class="gauge-label">成長ゲージ <span id="raise-stage-progress"></span></div>
+        <div class="gauge-bar">
+          <div id="raise-gauge-fill" class="gauge-fill"></div>
+        </div>
+      </div>
+      <div class="action-buttons">
+        <button class="action-btn" id="btn-feed">🍖 えさをあげる</button>
+        <button class="action-btn" id="btn-train-atk">⚔️ 攻撃トレーニング</button>
+        <button class="action-btn" id="btn-train-def">🛡️ 守りトレーニング</button>
+        <button class="action-btn" id="btn-train-spd">🏃 走りトレーニング</button>
+      </div>
+      <button class="battle-btn" id="btn-go-battle">⚔️ バトルに出撃！</button>
+      <div id="action-feedback" class="action-feedback"></div>
+    </div>
+  </div>
+
+  <!-- ========== バトル画面 ========== -->
+  <div id="screen-battle" class="screen">
+    <canvas id="battle-canvas"></canvas>
+    <div class="battle-ui">
+      <div class="battle-top">
+        <div class="fighter-info fighter-player">
+          <div id="battle-player-name" class="fighter-name"></div>
+          <div class="hp-bar-wrap">
+            <div id="battle-player-hp-bar" class="hp-bar player-hp"></div>
+          </div>
+          <div id="battle-player-hp-text" class="hp-text"></div>
+        </div>
+        <div class="vs-label">VS</div>
+        <div class="fighter-info fighter-enemy">
+          <div id="battle-enemy-name" class="fighter-name"></div>
+          <div class="hp-bar-wrap">
+            <div id="battle-enemy-hp-bar" class="hp-bar enemy-hp"></div>
+          </div>
+          <div id="battle-enemy-hp-text" class="hp-text"></div>
+        </div>
+      </div>
+      <div id="battle-log" class="battle-log"></div>
+      <div id="battle-result" class="battle-result hidden">
+        <div id="battle-result-title" class="result-title"></div>
+        <div id="battle-result-score" class="result-score"></div>
+        <div class="result-buttons">
+          <button id="btn-next-battle" class="action-btn">次の敵へ ▶</button>
+          <button id="btn-back-raise" class="action-btn secondary">育成に戻る</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 記録画面 ========== -->
+  <div id="screen-record" class="screen">
+    <div class="record-inner">
+      <h2 class="section-title">🏆 記録</h2>
+      <div class="record-cards">
+        <div class="record-card">
+          <div class="record-label">最高スコア</div>
+          <div id="rec-best-score" class="record-value">0</div>
+        </div>
+        <div class="record-card">
+          <div class="record-label">最高連勝数</div>
+          <div id="rec-best-streak" class="record-value">0</div>
+        </div>
+        <div class="record-card">
+          <div class="record-label">総討伐数</div>
+          <div id="rec-total-win" class="record-value">0</div>
+        </div>
+      </div>
+      <button class="action-btn" id="btn-back-from-record">← 戻る</button>
+    </div>
+  </div>
+
+  <!-- ========== ナビゲーション ========== -->
+  <nav id="main-nav" class="main-nav hidden">
+    <button class="nav-btn" data-screen="raise" id="nav-raise">🐉 育成</button>
+    <button class="nav-btn" data-screen="battle" id="nav-battle">⚔️ バトル</button>
+    <button class="nav-btn" data-screen="record" id="nav-record">🏆 記録</button>
+  </nav>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
