@@ -176,8 +176,8 @@ let hatchResizeHandler = null;
 
 function initHatchScene(attr) {
   const canvas = document.getElementById('hatch-canvas');
-  const W = canvas.clientWidth  || window.innerWidth;
-  const H = canvas.clientHeight || window.innerHeight;
+  const W = window.innerWidth;
+  const H = window.innerHeight;
 
   // 既存シーンがあれば破棄
   if (hatchAnimId) { cancelAnimationFrame(hatchAnimId); hatchAnimId = null; }
@@ -446,8 +446,8 @@ function initRaiseScene(attr) {
 
   // CSS レイアウト確定後にキャンバスサイズを取得
   requestAnimationFrame(() => {
-    const W = canvas.clientWidth  || window.innerWidth;
-    const H = canvas.clientHeight || Math.round(window.innerHeight * 0.5);
+    const W = window.innerWidth;
+    const H = window.innerHeight;
 
   raiseScene = new THREE.Scene();
   raiseScene.fog = new THREE.FogExp2(ATTR[attr].fogColor, 0.02);
@@ -514,10 +514,9 @@ function initRaiseScene(attr) {
   if (raiseResizeHandler) window.removeEventListener('resize', raiseResizeHandler);
   raiseResizeHandler = () => {
     if (!raiseRenderer || !raiseCamera) return;
-    // レイアウト確定後にサイズを読む
     requestAnimationFrame(() => {
-      const W2 = canvas.clientWidth  || window.innerWidth;
-      const H2 = canvas.clientHeight || window.innerHeight;
+      const W2 = window.innerWidth;
+      const H2 = window.innerHeight;
       if (W2 === 0 || H2 === 0) return;
       raiseCamera.aspect = W2 / H2;
       raiseCamera.updateProjectionMatrix();
