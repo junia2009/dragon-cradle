@@ -1,144 +1,134 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <!-- Background -->
-    <radialGradient id="bgGrad" cx="50%" cy="40%" r="75%">
-      <stop offset="0%" stop-color="#1e0635"/>
-      <stop offset="100%" stop-color="#070b14"/>
+    <radialGradient id="bg" cx="38%" cy="50%" r="70%">
+      <stop offset="0%"   stop-color="#1e0900"/>
+      <stop offset="100%" stop-color="#050203"/>
     </radialGradient>
-    <!-- Eye iris -->
-    <radialGradient id="eyeR" cx="35%" cy="30%" r="70%">
-      <stop offset="0%" stop-color="#ffe066"/>
-      <stop offset="35%" stop-color="#ff7700"/>
-      <stop offset="100%" stop-color="#cc1500"/>
-    </radialGradient>
-    <!-- Eye ambient glow -->
-    <radialGradient id="eyeAmbL" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#ff5500" stop-opacity="0.55"/>
-      <stop offset="100%" stop-color="#ff5500" stop-opacity="0"/>
-    </radialGradient>
-    <!-- Purple scale shimmer -->
-    <linearGradient id="scaleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#9d45ff" stop-opacity="0.7"/>
-      <stop offset="100%" stop-color="#5a10cc" stop-opacity="0.4"/>
+    <linearGradient id="fireGrad" x1="382" y1="0" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="10%"  stop-color="#FFE040"/>
+      <stop offset="35%"  stop-color="#FF7700"/>
+      <stop offset="68%"  stop-color="#FF3300" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#FF1100" stop-opacity="0"/>
     </linearGradient>
-    <!-- Forehead gem -->
-    <radialGradient id="gemGrad" cx="35%" cy="30%" r="70%">
-      <stop offset="0%" stop-color="#ff9933"/>
-      <stop offset="60%" stop-color="#ff3300"/>
-      <stop offset="100%" stop-color="#990000"/>
+    <linearGradient id="fireInner" x1="382" y1="0" x2="512" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#FFFFFF"/>
+      <stop offset="22%"  stop-color="#FFEE80"/>
+      <stop offset="55%"  stop-color="#FF9900" stop-opacity="0.44"/>
+      <stop offset="100%" stop-color="#FF4400" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="eyeG" cx="36%" cy="30%" r="68%">
+      <stop offset="0%"   stop-color="#FFE040"/>
+      <stop offset="38%"  stop-color="#FF8800"/>
+      <stop offset="100%" stop-color="#CC2200"/>
     </radialGradient>
-
-    <!-- Glow filter (eye + gem) -->
-    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="11" result="b1"/>
-      <feGaussianBlur in="SourceGraphic" stdDeviation="5"  result="b2"/>
-      <feMerge>
-        <feMergeNode in="b1"/>
-        <feMergeNode in="b2"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+    <filter id="fireGlow" x="-5%" y="-55%" width="115%" height="210%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="18" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <!-- Soft glow filter (horns / border) -->
-    <filter id="softGlow" x="-40%" y="-40%" width="180%" height="180%">
+    <filter id="eyeGlow" x="-250%" y="-250%" width="600%" height="600%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="rimGlow" x="-20%" y="-20%" width="140%" height="140%">
       <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="b"/>
-      <feMerge>
-        <feMergeNode in="b"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <!-- ── Background ── -->
-  <rect width="512" height="512" rx="92" fill="url(#bgGrad)"/>
+  <rect width="512" height="512" rx="90" fill="url(#bg)"/>
 
-  <!-- ── Atmospheric eye glow halos ── -->
-  <ellipse cx="198" cy="220" rx="68" ry="58" fill="url(#eyeAmbL)" filter="url(#glow)"/>
-  <ellipse cx="314" cy="220" rx="68" ry="58" fill="url(#eyeAmbL)" filter="url(#glow)"/>
+  <ellipse cx="435" cy="234" rx="148" ry="70"
+           fill="#FF4400" opacity="0.22" filter="url(#fireGlow)"/>
 
-  <!-- ── Horns (back layer) ── -->
-  <polygon points="168,90 145,18 208,128" fill="#3b1266" opacity="0.75"/>
-  <polygon points="344,90 367,18 304,128" fill="#3b1266" opacity="0.75"/>
+  <path d="
+    M 383,234
+    C 412,206 462,190 512,184 L 512,190
+    C 498,202 473,215 446,227
+    C 476,218 504,218 512,222 L 512,242
+    C 494,241 467,247 440,257
+    C 470,250 500,252 512,258 L 512,274
+    C 490,272 460,270 432,274
+    C 456,280 486,282 510,284 L 508,292
+    C 480,288 448,282 420,270
+    L 386,252 Z
+  " fill="url(#fireGrad)" filter="url(#fireGlow)" opacity="0.92"/>
 
-  <!-- ── Horns (front layer, glowing) ── -->
-  <polygon points="188,98 168,22 224,122" fill="#8a30f5" filter="url(#softGlow)"/>
-  <polygon points="324,98 344,22 288,122" fill="#8a30f5" filter="url(#softGlow)"/>
+  <path d="
+    M 384,238
+    C 408,220 450,212 494,208 L 512,210
+    C 498,218 474,229 445,240
+    C 474,233 502,234 512,238 L 512,250
+    C 494,250 468,254 440,262
+    L 387,250 Z
+  " fill="url(#fireInner)" opacity="0.88"/>
 
-  <!-- ── Side spines ── -->
-  <polygon points="148,150 120,108 162,178" fill="#6a1fc2" opacity="0.65"/>
-  <polygon points="364,150 392,108 350,178" fill="#6a1fc2" opacity="0.65"/>
+  <path id="head" d="
+    M 388,218
+    C 366,180 326,151 285,133
+    C 252,118 218,106 188,93
+    C 178,88 172,80 168,74
+    C 162,55 155,35 160,16
+    L 177,24
+    C 184,46 193,66 200,80
+    C 232,78 266,88 294,107 L 318,130
+    C 330,158 335,212 332,286
+    C 325,357 302,411 270,456
+    L 240,460
+    C 212,452 196,427 196,393
+    C 195,360 208,322 221,290 L 224,280
+    C 258,297 330,298 370,270 L 386,249
+    Z
+  " fill="#0c0401"/>
 
-  <!-- ── Head base ── -->
-  <path d="M256,100
-    L308,112 L352,140 L378,178 L388,220
-    L382,260 L360,288 L328,306 L292,316
-    L256,320 L220,316 L184,306 L152,288
-    L130,260 L124,220 L134,178 L160,140
-    L204,112 Z"
-    fill="#180636"/>
+  <path d="
+    M 388,218
+    C 366,180 326,151 285,133
+    C 252,118 218,106 188,93
+    C 178,88 172,80 168,74
+    C 162,55 155,35 160,16
+    L 177,24
+    C 184,46 193,66 200,80
+    C 232,78 266,88 294,107 L 318,130
+    C 330,158 335,212 332,286
+    C 325,357 302,411 270,456
+    L 240,460
+    C 212,452 196,427 196,393
+    C 195,360 208,322 221,290 L 224,280
+    C 258,297 330,298 370,270 L 386,249
+    Z
+  " fill="none" stroke="#FF5500" stroke-width="2.5"
+     opacity="0.65" filter="url(#rimGlow)"/>
 
-  <!-- ── Head scale shimmer overlay ── -->
-  <path d="M256,100
-    L308,112 L352,140 L378,178 L388,220
-    L382,260 L360,288 L328,306 L292,316
-    L256,320 L220,316 L184,306 L152,288
-    L130,260 L124,220 L134,178 L160,140
-    L204,112 Z"
-    fill="url(#scaleGrad)" opacity="0.18"/>
+  <path d="M 168,74 C 162,55 155,35 160,16 L 177,24 C 184,46 193,66 200,80"
+        fill="none" stroke="#FF5500" stroke-width="2" opacity="0.45"
+        filter="url(#rimGlow)"/>
 
-  <!-- ── Head outline ── -->
-  <path d="M256,100
-    L308,112 L352,140 L378,178 L388,220
-    L382,260 L360,288 L328,306 L292,316
-    L256,320 L220,316 L184,306 L152,288
-    L130,260 L124,220 L134,178 L160,140
-    L204,112 Z"
-    fill="none" stroke="#8a30f5" stroke-width="2.5" opacity="0.55"/>
+  <path d="M 205,115 C 238,106 272,106 296,120"
+        fill="none" stroke="#FF4400" stroke-width="2.5"
+        stroke-linecap="round" opacity="0.38" filter="url(#rimGlow)"/>
 
-  <!-- ── Brow ridge ── -->
-  <path d="M138,192 L178,172 L224,176" fill="none" stroke="#5a1a9e" stroke-width="5" stroke-linecap="round"/>
-  <path d="M374,192 L334,172 L288,176" fill="none" stroke="#5a1a9e" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 376,228 L 392,244 L 372,254 L 363,236 Z"
+        fill="#120601" stroke="#FF5500" stroke-width="1.2" opacity="0.60"/>
 
-  <!-- ── Scale lines ── -->
-  <path d="M190,152 Q256,142 322,152" fill="none" stroke="#5218b0" stroke-width="1.5" opacity="0.5"/>
-  <path d="M170,175 Q256,162 342,175" fill="none" stroke="#4a1090" stroke-width="1.2" opacity="0.4"/>
+  <ellipse cx="256" cy="163" rx="32" ry="24"
+           fill="#FF6600" opacity="0.32" filter="url(#eyeGlow)"/>
 
-  <!-- ── Left eye ── -->
-  <ellipse cx="198" cy="220" rx="36" ry="28" fill="url(#eyeR)" filter="url(#glow)"/>
-  <ellipse cx="198" cy="220" rx="10"  ry="24" fill="#030010"/>
-  <ellipse cx="198" cy="220" rx="36"  ry="28" fill="none" stroke="#ff8800" stroke-width="1.8" opacity="0.65"/>
-  <!-- shine -->
-  <ellipse cx="188" cy="209" rx="9" ry="5" fill="white" opacity="0.18" transform="rotate(-20 188 209)"/>
+  <ellipse cx="256" cy="163" rx="24" ry="18" fill="url(#eyeG)" filter="url(#eyeGlow)"/>
+  <ellipse cx="256" cy="163" rx="6"  ry="16" fill="#020006"/>
+  <ellipse cx="249" cy="155" rx="7"  ry="4"  fill="white" opacity="0.20"
+           transform="rotate(-18 249 155)"/>
+  <ellipse cx="256" cy="163" rx="24" ry="18" fill="none"
+           stroke="#FF8800" stroke-width="1.5" opacity="0.55"/>
 
-  <!-- ── Right eye ── -->
-  <ellipse cx="314" cy="220" rx="36" ry="28" fill="url(#eyeR)" filter="url(#glow)"/>
-  <ellipse cx="314" cy="220" rx="10"  ry="24" fill="#030010"/>
-  <ellipse cx="314" cy="220" rx="36"  ry="28" fill="none" stroke="#ff8800" stroke-width="1.8" opacity="0.65"/>
-  <!-- shine -->
-  <ellipse cx="304" cy="209" rx="9" ry="5" fill="white" opacity="0.18" transform="rotate(20 304 209)"/>
+  <ellipse cx="366" cy="204" rx="7" ry="5" fill="#080200"
+           transform="rotate(-25 366 204)"/>
 
-  <!-- ── Nose bridge ── -->
-  <path d="M228,256 L256,244 L284,256" fill="none" stroke="#42168e" stroke-width="3" stroke-linecap="round"/>
-  <!-- Nostrils -->
-  <ellipse cx="242" cy="264" rx="8" ry="6" fill="#0a0020" transform="rotate(-18 242 264)"/>
-  <ellipse cx="270" cy="264" rx="8" ry="6" fill="#0a0020" transform="rotate(18 270 264)"/>
+  <path d="M 224,315 C 252,306 287,304 314,314"
+        fill="none" stroke="#FF4400" stroke-width="1" opacity="0.14" stroke-linecap="round"/>
+  <path d="M 218,348 C 248,338 286,336 314,346"
+        fill="none" stroke="#FF4400" stroke-width="1" opacity="0.11" stroke-linecap="round"/>
 
-  <!-- ── Jaw ── -->
-  <path d="M178,295 Q218,316 256,318 Q294,316 334,295"
-    fill="none" stroke="#6a22b0" stroke-width="2.5" opacity="0.7"/>
-
-  <!-- ── Neck / body silhouette ── -->
-  <path d="M192,306 L170,390 L196,448 L256,462 L316,448 L342,390 L320,306"
-    fill="#110228" opacity="0.55"/>
-  <path d="M192,306 L170,390 L196,448 L256,462 L316,448 L342,390 L320,306"
-    fill="none" stroke="#7B2FFF" stroke-width="1.5" opacity="0.30"/>
-
-  <!-- ── Forehead gem (diamond) ── -->
-  <polygon points="256,116 268,134 256,144 244,134"
-    fill="url(#gemGrad)" filter="url(#glow)" opacity="0.85"/>
-  <polygon points="256,120 265,133 256,141 247,133"
-    fill="#ffcc55" opacity="0.45"/>
-
-  <!-- ── Outer border glow ── -->
-  <rect width="512" height="512" rx="92" fill="none"
-    stroke="#8a30f5" stroke-width="3" opacity="0.30"/>
+  <rect width="512" height="512" rx="90" fill="none"
+        stroke="#FF3300" stroke-width="3" opacity="0.16"/>
 </svg>
