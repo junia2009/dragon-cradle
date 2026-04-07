@@ -1008,7 +1008,7 @@ function addBattleLog(msg) {
   if (!log) return;
   const line = document.createElement('div');
   line.textContent = msg;
-  line.className = 'fade-in';
+  line.className = 'battle-log-line fade-in';
   log.appendChild(line);
   log.scrollTop = log.scrollHeight;
 }

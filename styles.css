@@ -349,19 +349,28 @@ html, body {
   width: 100%;
   max-width: 460px;
   flex: 1;
-  min-height: 0;
-  max-height: 180px;
+  min-height: 120px;
+  max-height: 260px;
   overflow-y: auto;
   background: rgba(7,11,20,0.8);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 10px;
-  padding: 0.6rem 1rem;
-  font-size: 0.8rem;
-  line-height: 1.8;
+  padding: 0.7rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
   color: var(--text-main);
+  /* モバイルブラウザのフォント自動拡大を抑止 */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 .battle-log::-webkit-scrollbar { width: 4px; }
 .battle-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+/* バトルログ各行：フォントサイズを明示して自動拡大を防ぐ */
+.battle-log-line {
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
 
 .battle-result {
   position: absolute;
