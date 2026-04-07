@@ -172,6 +172,7 @@ let eggGroup = null;
 let eggCrackLines = [];
 let hatchParticles = [];
 let hatchIdleTimer = null;
+let hatchResizeHandler = null;
 
 function initHatchScene(attr) {
   const canvas = document.getElementById('hatch-canvas');
@@ -223,14 +224,19 @@ function initHatchScene(attr) {
     shakeEgg(pts >= 8 ? 0.6 : 0.3);
   };
 
-  window.addEventListener('resize', () => {
-    if (!hatchRenderer) return;
-    const W2 = canvas.clientWidth  || window.innerWidth;
-    const H2 = canvas.clientHeight || window.innerHeight;
-    hatchCamera.aspect = W2 / H2;
-    hatchCamera.updateProjectionMatrix();
-    hatchRenderer.setSize(W2, H2);
-  });
+  if (hatchResizeHandler) window.removeEventListener('resize', hatchResizeHandler);
+  hatchResizeHandler = () => {
+    if (!hatchRenderer || !hatchCamera) return;
+    requestAnimationFrame(() => {
+      const W2 = canvas.clientWidth  || window.innerWidth;
+      const H2 = canvas.clientHeight || window.innerHeight;
+      if (W2 === 0 || H2 === 0) return;
+      hatchCamera.aspect = W2 / H2;
+      hatchCamera.updateProjectionMatrix();
+      hatchRenderer.setSize(W2, H2);
+    });
+  };
+  window.addEventListener('resize', hatchResizeHandler);
 }
 
 function updateHatchLabel(attr) {
@@ -430,6 +436,7 @@ let attrEffectParticles = [];
 let raiseIdleTimer = null;
 let staCountdownTimer = null;
 let staNextRecovery = 0; // 次回スタミナ回復の予定時刻(ms)
+let raiseResizeHandler = null; // resizeリスナ輴笯管理用
 
 function initRaiseScene(attr) {
   const canvas = document.getElementById('raise-canvas');
@@ -503,14 +510,21 @@ function initRaiseScene(attr) {
   setupRaiseButtons(attr);
   updateRaiseUI();
 
-  window.addEventListener('resize', () => {
-    if (!raiseRenderer) return;
-    const W2 = canvas.clientWidth  || window.innerWidth;
-    const H2 = canvas.clientHeight || window.innerHeight;
-    raiseCamera.aspect = W2 / H2;
-    raiseCamera.updateProjectionMatrix();
-    raiseRenderer.setSize(W2, H2, false);
-  });
+  // 旧リスナを必ず削除してから再登録（重複覄積を防ぐ）
+  if (raiseResizeHandler) window.removeEventListener('resize', raiseResizeHandler);
+  raiseResizeHandler = () => {
+    if (!raiseRenderer || !raiseCamera) return;
+    // レイアウト確定後にサイズを読む
+    requestAnimationFrame(() => {
+      const W2 = canvas.clientWidth  || window.innerWidth;
+      const H2 = canvas.clientHeight || window.innerHeight;
+      if (W2 === 0 || H2 === 0) return;
+      raiseCamera.aspect = W2 / H2;
+      raiseCamera.updateProjectionMatrix();
+      raiseRenderer.setSize(W2, H2, false);
+    });
+  };
+  window.addEventListener('resize', raiseResizeHandler);
   }); // requestAnimationFrame end
 }
 
