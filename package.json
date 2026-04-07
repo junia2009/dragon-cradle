@@ -1,0 +1,24 @@
+{
+  "name": "27_dragon-cradle",
+  "version": "1.0.0",
+  "description": "",
+  "main": "game.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/junia2009/dragon-cradle.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/junia2009/dragon-cradle/issues"
+  },
+  "homepage": "https://github.com/junia2009/dragon-cradle#readme",
+  "devDependencies": {
+    "sharp": "^0.34.5"
+  }
+}
