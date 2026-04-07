@@ -370,11 +370,14 @@ let trainCooldown = {};
 
 function initRaiseScene(attr) {
   const canvas = document.getElementById('raise-canvas');
-  const W = canvas.clientWidth  || window.innerWidth;
-  const H = canvas.clientHeight || window.innerHeight;
 
   if (raiseAnimId) { cancelAnimationFrame(raiseAnimId); raiseAnimId = null; }
   if (raiseRenderer) { raiseRenderer.dispose(); }
+
+  // CSS レイアウト確定後にキャンバスサイズを取得
+  requestAnimationFrame(() => {
+    const W = canvas.clientWidth  || window.innerWidth;
+    const H = canvas.clientHeight || Math.round(window.innerHeight * 0.5);
 
   raiseScene = new THREE.Scene();
   raiseScene.fog = new THREE.FogExp2(ATTR[attr].fogColor, 0.02);
@@ -384,11 +387,8 @@ function initRaiseScene(attr) {
   raiseCamera.lookAt(0, 0, 0);
 
   raiseRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  raiseRenderer.setSize(W, H);
+  raiseRenderer.setSize(W, H, false);
   raiseRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  raiseRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-  raiseRenderer.toneMappingExposure = 1.2;
-  raiseRenderer.shadowMap.enabled = true;
 
   // ライト
   raiseScene.add(new THREE.AmbientLight(0x334466, 0.7));
@@ -422,8 +422,9 @@ function initRaiseScene(attr) {
     const H2 = canvas.clientHeight || window.innerHeight;
     raiseCamera.aspect = W2 / H2;
     raiseCamera.updateProjectionMatrix();
-    raiseRenderer.setSize(W2, H2);
+    raiseRenderer.setSize(W2, H2, false);
   });
+  }); // requestAnimationFrame end
 }
 
 // ---- ドラゴンモデル（ボクセル） ----
