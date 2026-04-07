@@ -553,3 +553,177 @@ html, body {
   transition: opacity 0.4s ease;
   letter-spacing: 0.05em;
 }
+
+/* ============================================================
+   Safe Area サポート（iPhone ノッチ / Dynamic Island / ホームバー）
+   ============================================================ */
+@supports (padding: env(safe-area-inset-top)) {
+  .main-nav {
+    padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
+  }
+  .hatch-ui, .raise-ui, .battle-ui {
+    padding-top:    max(1.5rem, env(safe-area-inset-top));
+    padding-left:   max(1.5rem, env(safe-area-inset-left));
+    padding-right:  max(1.5rem, env(safe-area-inset-right));
+    padding-bottom: max(1rem,   env(safe-area-inset-bottom));
+  }
+  .screen-select-inner {
+    padding-left:  max(2rem, env(safe-area-inset-left));
+    padding-right: max(2rem, env(safe-area-inset-right));
+    padding-top:   max(2rem, env(safe-area-inset-top));
+  }
+}
+
+/* ============================================================
+   小画面横向き（スマホ横画面）コンパクト対応
+   ============================================================ */
+@media (max-height: 450px) and (orientation: landscape) {
+  .raise-ui {
+    padding-top: 0.5rem;
+    padding-bottom: 0.4rem;
+    gap: 0.25rem;
+  }
+  .stats-panel {
+    padding: 0.4rem 0.8rem;
+    gap: 0.15rem;
+  }
+  .stat-bar-wrap { height: 4px; }
+  .action-buttons { gap: 0.3rem; }
+  .action-btn { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+  .battle-btn { padding: 0.4rem 1rem; font-size: 0.8rem; }
+  .battle-log { height: 80px; font-size: 0.72rem; }
+  .main-nav { padding-top: 0.3rem; padding-bottom: 0.3rem; }
+  .nav-btn { font-size: 0.65rem; padding: 0.3rem 0.6rem; }
+  .attr-label { font-size: 0.9rem; }
+  .stage-label { font-size: 0.65rem; }
+  .growth-gauge-wrap .gauge-bar { height: 6px; }
+  .hatch-ui { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .hatch-center-hint { font-size: 0.7rem; }
+  .screen-select-inner { gap: 1rem; padding: 1rem; }
+  .game-title { font-size: clamp(1.6rem, 4vw, 2.5rem); }
+  .attribute-cards { grid-template-columns: repeat(4, 1fr); gap: 0.5rem; }
+  .attr-card { padding: 0.7rem 0.5rem; gap: 0.2rem; }
+  .attr-icon { font-size: 1.4rem; }
+  .attr-stats { display: none; }
+}
+
+/* ============================================================
+   縦画面警告オーバーレイ
+   ============================================================ */
+#orientation-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-dark);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#orientation-overlay.hidden { display: none; }
+
+/* 星空背景 */
+#orientation-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 28% 72%, rgba(200,210,255,0.40) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 52% 25%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 76% 55%, rgba(180,200,255,0.50) 0%, transparent 100%),
+    radial-gradient(1px 1px at 88% 12%, rgba(255,255,255,0.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 18% 88%, rgba(255,220,255,0.35) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 92% 82%, rgba(255,255,255,0.45) 0%, transparent 100%),
+    radial-gradient(1px 1px at 42% 92%, rgba(200,210,255,0.40) 0%, transparent 100%),
+    radial-gradient(1px 1px at 63% 48%, rgba(255,255,255,0.30) 0%, transparent 100%),
+    radial-gradient(1px 1px at 38% 35%, rgba(255,255,255,0.40) 0%, transparent 100%);
+  pointer-events: none;
+  animation: orient-twinkle 3s ease-in-out infinite alternate;
+}
+@keyframes orient-twinkle {
+  from { opacity: 0.65; }
+  to   { opacity: 1; }
+}
+
+.orient-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+.orient-anim {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 130px;
+}
+
+.orient-phone {
+  width: 54px;
+  height: 90px;
+  border: 3px solid #7B2FFF;
+  border-radius: 12px;
+  background: rgba(123,47,255,0.08);
+  box-shadow: 0 0 20px rgba(123,47,255,0.5), inset 0 0 10px rgba(123,47,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: orient-phone-spin 2.8s cubic-bezier(0.45,0.05,0.55,0.95) infinite;
+  transform-origin: center center;
+}
+
+.orient-dragon {
+  display: inline-block;
+  font-size: 2rem;
+  animation: orient-dragon-anim 2.8s ease-in-out infinite;
+}
+
+.orient-rotate-hint {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  font-size: 1.8rem;
+  color: rgba(123,47,255,0.75);
+  line-height: 1;
+  animation: orient-hint-anim 2.8s ease-in-out infinite;
+}
+
+.orient-msg {
+  font-family: var(--font-title);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 0 16px rgba(255,255,255,0.25);
+}
+.orient-sub {
+  font-family: var(--font-title);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  letter-spacing: 0.2em;
+  text-align: center;
+  margin-top: -1.4rem;
+}
+
+@keyframes orient-phone-spin {
+  0%,  20% { transform: rotate(0deg);  }
+  55%, 70% { transform: rotate(90deg); }
+  90%,100% { transform: rotate(0deg);  }
+}
+@keyframes orient-dragon-anim {
+  0%,  20% { transform: scale(1);    filter: drop-shadow(0 0 5px gold); }
+  55%      { transform: scale(0.72); filter: drop-shadow(0 0 3px gold); }
+  65%      { transform: scale(1.25); filter: drop-shadow(0 0 20px #FF4500) drop-shadow(0 0 8px gold); }
+  80%,100% { transform: scale(1);    filter: drop-shadow(0 0 5px gold); }
+}
+@keyframes orient-hint-anim {
+  0%,  20% { opacity: 1;   transform: rotate(0deg);   }
+  55%, 70% { opacity: 0.2; transform: rotate(90deg);  }
+  90%,100% { opacity: 1;   transform: rotate(0deg);   }
+}

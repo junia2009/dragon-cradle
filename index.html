@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Dragon Cradle</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -173,6 +173,20 @@
     <button class="nav-btn" data-screen="battle" id="nav-battle">⚔️ バトル</button>
     <button class="nav-btn" data-screen="record" id="nav-record">🏆 記録</button>
   </nav>
+
+  <!-- ========== 縦画面警告オーバーレイ ========== -->
+  <div id="orientation-overlay" class="hidden">
+    <div class="orient-content">
+      <div class="orient-anim">
+        <div class="orient-phone">
+          <span class="orient-dragon">🐉</span>
+        </div>
+        <span class="orient-rotate-hint">↻</span>
+      </div>
+      <p class="orient-msg">横画面にしてね！</p>
+      <p class="orient-sub">ROTATE DEVICE TO LANDSCAPE</p>
+    </div>
+  </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="game.js"></script>

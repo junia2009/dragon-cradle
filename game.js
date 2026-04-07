@@ -1169,3 +1169,24 @@ document.getElementById('btn-back-from-record').addEventListener('click', () => 
     showScreen('select');
   }
 })();
+
+// ============================================================
+// 向き検知（縦画面オーバーレイ表示）
+// ============================================================
+const orientOverlay = document.getElementById('orientation-overlay');
+
+function checkOrientation() {
+  const isPortrait = window.innerHeight > window.innerWidth;
+  orientOverlay.classList.toggle('hidden', !isPortrait);
+}
+
+// リサイズ・画面回転で再チェック
+window.addEventListener('resize', checkOrientation);
+if (screen.orientation) {
+  screen.orientation.addEventListener('change', () => setTimeout(checkOrientation, 150));
+} else {
+  window.addEventListener('orientationchange', () => setTimeout(checkOrientation, 150));
+}
+
+// 初期チェック
+checkOrientation();
