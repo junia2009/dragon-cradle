@@ -759,9 +759,9 @@ function animateRaise() {
   const t = performance.now() * 0.001;
 
   if (dragonGroup) {
-    // ゆっくり浮遊 + 回転
+    // ゆっくり浮遊（回転なし、正面向き固定）
     dragonGroup.position.y = Math.sin(t * 0.8) * 0.12;
-    dragonGroup.rotation.y = t * 0.25;
+    dragonGroup.rotation.y = 0;
   }
 
   // 属性エフェクトパーティクル

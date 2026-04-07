@@ -292,8 +292,10 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
-  padding: 1.5rem;
+  justify-content: flex-start;
+  gap: 0.8rem;
+  padding: 1.5rem 1.5rem calc(3.6rem + max(0.3rem, env(safe-area-inset-bottom, 0px)));
+  overflow: hidden;
 }
 
 .battle-top {
@@ -346,7 +348,9 @@ html, body {
 .battle-log {
   width: 100%;
   max-width: 460px;
-  height: 140px;
+  flex: 1;
+  min-height: 0;
+  max-height: 180px;
   overflow-y: auto;
   background: rgba(7,11,20,0.8);
   border: 1px solid rgba(255,255,255,0.08);
@@ -596,7 +600,12 @@ html, body {
     padding-top:    max(1.5rem, env(safe-area-inset-top));
     padding-left:   max(1.5rem, env(safe-area-inset-left));
     padding-right:  max(1.5rem, env(safe-area-inset-right));
-    padding-bottom: max(1rem,   env(safe-area-inset-bottom));
+  }
+  .hatch-ui {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .battle-ui {
+    padding-bottom: calc(3.6rem + max(0.3rem, env(safe-area-inset-bottom)));
   }
   /* 育成UI：safe-area対応 */
   .raise-ui {
@@ -637,7 +646,7 @@ html, body {
   .action-buttons { gap: 0.3rem; }
   .action-btn { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
   .battle-btn { padding: 0.4rem 1rem; font-size: 0.8rem; }
-  .battle-log { height: 80px; font-size: 0.72rem; }
+  .battle-log { max-height: 70px; font-size: 0.72rem; }
   .main-nav { padding-top: 0.3rem; padding-bottom: 0.3rem; }
   .nav-btn { font-size: 0.65rem; padding: 0.3rem 0.6rem; }
   .attr-label { font-size: 0.9rem; }
