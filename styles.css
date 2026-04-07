@@ -858,7 +858,7 @@ html, body {
 @media (max-height: 450px) and (orientation: landscape) {
   .raise-ui {
     padding-top: 1rem;
-    padding-bottom: 0.4rem;
+    padding-bottom: calc(3rem + max(0px, env(safe-area-inset-bottom, 0px)));
     gap: 0.25rem;
   }
   .stats-panel {
