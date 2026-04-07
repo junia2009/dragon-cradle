@@ -1,362 +1,220 @@
 ﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <!-- Background: deep near-black with warm ember tint -->
-    <radialGradient id="bg" cx="50%" cy="45%" r="65%">
-      <stop offset="0%"   stop-color="#180800"/>
-      <stop offset="100%" stop-color="#030101"/>
+    <radialGradient id="bg" cx="50%" cy="55%" r="66%">
+      <stop offset="0%"   stop-color="#1a0700"/>
+      <stop offset="60%"  stop-color="#0a0200"/>
+      <stop offset="100%" stop-color="#020101"/>
     </radialGradient>
-
-    <!-- Body fill: very dark charcoal with warm tint -->
-    <linearGradient id="bodyFill" x1="256" y1="80" x2="256" y2="480" gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#1a0905"/>
-      <stop offset="100%" stop-color="#0a0300"/>
-    </linearGradient>
-
-    <!-- Wing membrane: slightly lighter dark -->
-    <linearGradient id="wingFill" x1="0" y1="160" x2="512" y2="380" gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#120602"/>
-      <stop offset="100%" stop-color="#0e0401"/>
-    </linearGradient>
-
-    <!-- Orange accent gradient (top of body/head) -->
-    <linearGradient id="accent" x1="256" y1="80" x2="256" y2="320" gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#FF6600"/>
-      <stop offset="100%" stop-color="#FF2200"/>
-    </linearGradient>
-
-    <!-- Eye -->
-    <radialGradient id="eyeG" cx="33%" cy="28%" r="68%">
+    <radialGradient id="fireAmbient" cx="50%" cy="82%" r="68%">
+      <stop offset="0%"   stop-color="#FF5500" stop-opacity="0.70"/>
+      <stop offset="45%"  stop-color="#FF2200" stop-opacity="0.38"/>
+      <stop offset="100%" stop-color="#FF0000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="eyeG" cx="30%" cy="24%" r="70%">
       <stop offset="0%"   stop-color="#FFE040"/>
-      <stop offset="45%"  stop-color="#FF8800"/>
-      <stop offset="100%" stop-color="#CC1800"/>
+      <stop offset="42%"  stop-color="#FF8800"/>
+      <stop offset="100%" stop-color="#CC2000"/>
     </radialGradient>
-
-    <!-- Bloom filter for glow effects -->
-    <filter id="bloom" x="-60%" y="-60%" width="220%" height="220%">
-      <feGaussianBlur stdDeviation="12" result="b"/>
+    <filter id="bigBloom" x="-55%" y="-55%" width="210%" height="210%">
+      <feGaussianBlur stdDeviation="22" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <filter id="softBloom" x="-40%" y="-40%" width="180%" height="180%">
-      <feGaussianBlur stdDeviation="7" result="b"/>
+    <filter id="eyeBloom" x="-160%" y="-160%" width="420%" height="420%">
+      <feGaussianBlur stdDeviation="13" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
-    <filter id="edgeGlow" x="-12%" y="-12%" width="124%" height="124%">
-      <feGaussianBlur stdDeviation="3.5" result="b"/>
+    <filter id="rimF" x="-16%" y="-16%" width="132%" height="132%">
+      <feGaussianBlur stdDeviation="4.5" result="b"/>
       <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <!-- === BACKGROUND === -->
+  <!-- BG -->
   <rect width="512" height="512" rx="88" fill="url(#bg)"/>
+  <rect width="512" height="512" rx="88" fill="url(#fireAmbient)"/>
 
-  <!-- === WINGS (drawn first, behind body) === -->
-  <!-- Left wing -->
-  <path d="
-    M 200,210
-    C 172,190 124,162 72,148
-    C 38,138 14,148 6,156
-    C 20,144 52,130 88,136
-    C 48,120 16,126 4,132
-    C 18,118 58,106 100,116
-    C 62,96 28,100 12,106
-    C 28,90 74,82 118,98
-    C 84,74 52,74 38,80
-    C 58,62 104,58 148,82
-    C 184,100 206,136 212,160
-    C 216,174 214,196 200,210
-    Z
-  " fill="url(#wingFill)"/>
-  <!-- Left wing spars (bone fingers) -->
-  <line x1="200" y1="210" x2="72"  y2="148" stroke="#FF4400" stroke-width="1.2" opacity="0.22"/>
-  <line x1="200" y1="210" x2="100" y2="116" stroke="#FF4400" stroke-width="1.0" opacity="0.18"/>
-  <line x1="200" y1="210" x2="118" y2="98"  stroke="#FF4400" stroke-width="0.9" opacity="0.15"/>
-  <line x1="200" y1="210" x2="148" y2="82"  stroke="#FF4400" stroke-width="0.8" opacity="0.13"/>
+  <!-- Fire bloom layers -->
+  <ellipse cx="256" cy="466" rx="210" ry="72"  fill="#FF5500" opacity="0.55" filter="url(#bigBloom)"/>
+  <ellipse cx="256" cy="390" rx="155" ry="95"  fill="#FF4400" opacity="0.38" filter="url(#bigBloom)"/>
+  <ellipse cx="256" cy="290" rx="100" ry="85"  fill="#FF2200" opacity="0.20" filter="url(#bigBloom)"/>
+  <ellipse cx="256" cy="190" rx="55"  ry="55"  fill="#FF1100" opacity="0.10" filter="url(#bigBloom)"/>
 
-  <!-- Right wing -->
+  <!-- ========== LEFT WING ==========
+       Leading edge: shoulder(192,242) → C(140,205)(68,145)(18,68) tip
+       Trailing edge: tip(18,68) → S-curve down → bottom(80,386)
+       Inner: Z (straight back to shoulder)
+  -->
   <path d="
-    M 312,210
-    C 340,190 388,162 440,148
-    C 474,138 498,148 506,156
-    C 492,144 460,130 424,136
-    C 464,120 496,126 508,132
-    C 494,118 454,106 412,116
-    C 450,96 484,100 500,106
-    C 484,90 438,82 394,98
-    C 428,74 460,74 474,80
-    C 454,62 408,58 364,82
-    C 328,100 306,136 300,160
-    C 296,174 298,196 312,210
+    M 192,242
+    C 140,205 68,145 18,68
+    C 44,132 54,198 58,260
+    C 62,314 70,352 80,386
     Z
-  " fill="url(#wingFill)"/>
-  <!-- Right wing spars -->
-  <line x1="312" y1="210" x2="440" y2="148" stroke="#FF4400" stroke-width="1.2" opacity="0.22"/>
-  <line x1="312" y1="210" x2="412" y2="116" stroke="#FF4400" stroke-width="1.0" opacity="0.18"/>
-  <line x1="312" y1="210" x2="394" y2="98"  stroke="#FF4400" stroke-width="0.9" opacity="0.15"/>
-  <line x1="312" y1="210" x2="364" y2="82"  stroke="#FF4400" stroke-width="0.8" opacity="0.13"/>
+  " fill="#0c0200"/>
+
+  <!-- ========== RIGHT WING (mirror) ========== -->
+  <path d="
+    M 320,242
+    C 372,205 444,145 494,68
+    C 468,132 458,198 454,260
+    C 450,314 442,352 432,386
+    Z
+  " fill="#0c0200"/>
 
   <!-- Wing rim glow -->
-  <path d="
-    M 200,210
-    C 172,190 124,162 72,148
-    C 38,138 14,148 6,156
-    C 20,144 52,130 88,136
-    C 48,120 16,126 4,132
-    C 18,118 58,106 100,116
-    C 62,96 28,100 12,106
-    C 28,90 74,82 118,98
-    C 84,74 52,74 38,80
-    C 58,62 104,58 148,82
-    C 184,100 206,136 212,160
-    C 216,174 214,196 200,210 Z
-  " fill="none" stroke="#FF4400" stroke-width="1.5" opacity="0.28" filter="url(#edgeGlow)"/>
-  <path d="
-    M 312,210
-    C 340,190 388,162 440,148
-    C 474,138 498,148 506,156
-    C 492,144 460,130 424,136
-    C 464,120 496,126 508,132
-    C 494,118 454,106 412,116
-    C 450,96 484,100 500,106
-    C 484,90 438,82 394,98
-    C 428,74 460,74 474,80
-    C 454,62 408,58 364,82
-    C 328,100 306,136 300,160
-    C 296,174 298,196 312,210 Z
-  " fill="none" stroke="#FF4400" stroke-width="1.5" opacity="0.28" filter="url(#edgeGlow)"/>
+  <path d="M 192,242 C 140,205 68,145 18,68 C 44,132 54,198 58,260 C 62,314 70,352 80,386 Z"
+    fill="none" stroke="#FF3300" stroke-width="2" opacity="0.38" filter="url(#rimF)"/>
+  <path d="M 320,242 C 372,205 444,145 494,68 C 468,132 458,198 454,260 C 450,314 442,352 432,386 Z"
+    fill="none" stroke="#FF3300" stroke-width="2" opacity="0.38" filter="url(#rimF)"/>
 
-  <!-- === TAIL === -->
-  <path d="
-    M 286,420
-    C 296,440 308,462 330,474
-    C 346,484 362,484 372,476
-    C 356,482 344,476 334,464
-    C 350,474 366,472 376,462
-    C 364,470 354,462 346,450
-    C 292,458 278,432 284,418
-    Z
-  " fill="url(#bodyFill)"/>
-  <!-- Tail tip accent -->
-  <path d="M 372,476 C 380,468 378,456 372,450 C 366,462 354,468 342,466"
-        fill="#FF3300" opacity="0.55" filter="url(#softBloom)"/>
+  <!-- Wing membrane vein lines -->
+  <line x1="192" y1="242" x2="18"  y2="68"  stroke="#FF4400" stroke-width="1.3" opacity="0.20"/>
+  <line x1="162" y1="258" x2="48"  y2="148" stroke="#FF3300" stroke-width="1.0" opacity="0.14"/>
+  <line x1="133" y1="284" x2="58"  y2="226" stroke="#FF2200" stroke-width="0.9" opacity="0.10"/>
+  <line x1="320" y1="242" x2="494" y2="68"  stroke="#FF4400" stroke-width="1.3" opacity="0.20"/>
+  <line x1="350" y1="258" x2="464" y2="148" stroke="#FF3300" stroke-width="1.0" opacity="0.14"/>
+  <line x1="379" y1="284" x2="454" y2="226" stroke="#FF2200" stroke-width="0.9" opacity="0.10"/>
 
-  <!-- === BODY === -->
-  <!-- Main torso -->
+  <!-- ========== BODY ==========
+       Top: x[212,300] at y~238 (between wing shoulders)
+       Bottom: narrowing to hips, legs implied
+  -->
   <path d="
-    M 256,112
-    C 282,108 308,118 322,136
-    C 336,152 338,174 332,196
-    L 322,226
-    C 318,242 316,268 318,290
-    L 318,340
-    C 318,366 310,392 296,416
-    L 286,432
-    C 272,444 256,450 256,450
-    C 256,450 240,444 226,432
-    L 216,416
-    C 202,392 194,366 194,340
-    L 194,290
-    C 196,268 194,242 190,226
-    L 180,196
-    C 174,174 176,152 190,136
-    C 204,118 230,108 256,112
-    Z
-  " fill="url(#bodyFill)"/>
+    M 212,238
+    C 198,262 192,304 194,346
+    C 196,382 206,414 218,440
+    L 228,454 C 234,462 246,466 256,466
+    C 266,466 278,462 284,454 L 294,440
+    C 306,414 316,382 318,346
+    C 320,304 314,262 300,238
+    C 282,232 268,230 256,230
+    C 244,230 226,232 212,238 Z
+  " fill="#0e0300"/>
+  <path d="
+    M 212,238 C 198,262 192,304 194,346 C 196,382 206,414 218,440
+    L 228,454 C 234,462 246,466 256,466 C 266,466 278,462 284,454 L 294,440
+    C 306,414 316,382 318,346 C 320,304 314,262 300,238
+    C 282,232 268,230 256,230 C 244,230 226,232 212,238 Z
+  " fill="none" stroke="#FF4400" stroke-width="2" opacity="0.48" filter="url(#rimF)"/>
 
-  <!-- Belly scales (lighter area) -->
-  <path d="
-    M 256,160
-    C 272,158 282,168 284,184
-    L 284,330
-    C 284,352 272,372 256,378
-    C 240,372 228,352 228,330
-    L 228,184
-    C 230,168 240,158 256,160 Z
-  " fill="#140603" opacity="0.80"/>
+  <!-- Belly scale highlight -->
+  <path d="M 238,260 C 244,256 256,255 268,256 L 272,340 C 268,368 262,388 256,394 C 250,388 244,368 240,340 Z"
+    fill="#160500" opacity="0.75"/>
 
-  <!-- Body rim glow -->
+  <!-- ========== NECK ========== -->
   <path d="
-    M 256,112
-    C 282,108 308,118 322,136
-    C 336,152 338,174 332,196
-    L 322,226 C 318,242 316,268 318,290
-    L 318,340 C 318,366 310,392 296,416
-    L 286,432 C 272,444 256,450 256,450
-    C 256,450 240,444 226,432
-    L 216,416 C 202,392 194,366 194,340
-    L 194,290 C 196,268 194,242 190,226
-    L 180,196 C 174,174 176,152 190,136
-    C 204,118 230,108 256,112 Z
-  " fill="none" stroke="#FF5500" stroke-width="2" opacity="0.50"
-    filter="url(#edgeGlow)"/>
+    M 234,210 C 228,220 225,234 227,242 L 285,242
+    C 287,234 284,220 278,210 Z
+  " fill="#0e0300"/>
 
-  <!-- === LEGS === -->
-  <!-- Left leg -->
+  <!-- ========== HEAD ==========
+       Oval, front-facing, spans x[194,318] y[96,212]
+  -->
   <path d="
-    M 210,330
-    C 194,350 182,374 178,396
-    C 174,414 178,430 186,438
-    L 196,444
-    C 186,446 172,436 168,422
-    C 162,402 168,378 178,354
-    C 186,334 200,316 212,310
-    Z
-  " fill="url(#bodyFill)"/>
-  <!-- Left foot / claws -->
-  <path d="M 178,436 C 168,442 158,446 152,440 C 164,446 172,448 180,444" fill="#0e0300"/>
-  <path d="M 186,440 C 182,452 176,460 168,458 C 178,462 188,458 194,450" fill="#0e0300"/>
-  <path d="M 196,442 C 196,454 192,464 186,464 C 192,466 200,462 204,452" fill="#0e0300"/>
-  <!-- Claw rim -->
-  <path d="M 152,440 C 158,446 168,458 168,458 C 178,462 188,458 194,450 C 200,456 204,464 186,464"
-        fill="none" stroke="#FF4400" stroke-width="1.2" opacity="0.35"/>
+    M 256,96
+    C 282,96 304,108 314,128
+    C 324,148 322,172 312,188
+    C 302,202 282,210 256,212
+    C 230,210 210,202 200,188
+    C 190,172 188,148 198,128
+    C 208,108 230,96 256,96 Z
+  " fill="#0e0300"/>
+  <path d="
+    M 256,96 C 282,96 304,108 314,128 C 324,148 322,172 312,188
+    C 302,202 282,210 256,212 C 230,210 210,202 200,188
+    C 190,172 188,148 198,128 C 208,108 230,96 256,96 Z
+  " fill="none" stroke="#FF5500" stroke-width="2.2" opacity="0.58" filter="url(#rimF)"/>
 
-  <!-- Right leg -->
-  <path d="
-    M 302,330
-    C 318,350 330,374 334,396
-    C 338,414 334,430 326,438
-    L 316,444
-    C 326,446 340,436 344,422
-    C 350,402 344,378 334,354
-    C 326,334 312,316 300,310
-    Z
-  " fill="url(#bodyFill)"/>
-  <!-- Right foot / claws -->
-  <path d="M 334,436 C 344,442 354,446 360,440 C 348,446 340,448 332,444" fill="#0e0300"/>
-  <path d="M 326,440 C 330,452 336,460 344,458 C 334,462 324,458 318,450" fill="#0e0300"/>
-  <path d="M 316,442 C 316,454 320,464 326,464 C 320,466 312,462 308,452" fill="#0e0300"/>
-  <!-- Claw rim -->
-  <path d="M 360,440 C 354,446 344,458 344,458 C 334,462 324,458 318,450 C 312,456 308,464 326,464"
-        fill="none" stroke="#FF4400" stroke-width="1.2" opacity="0.35"/>
+  <!-- ========== HORNS ==========
+       Left:  points 228,112 → 202,26 → 241,107
+       Right: points 284,112 → 310,26 → 271,107
+  -->
+  <polygon points="228,112 202,26 241,107" fill="#0c0200"/>
+  <polygon points="228,112 202,26 241,107" fill="none" stroke="#FF4400" stroke-width="1.8" opacity="0.60" filter="url(#rimF)"/>
+  <polygon points="284,112 310,26 271,107" fill="#0c0200"/>
+  <polygon points="284,112 310,26 271,107" fill="none" stroke="#FF4400" stroke-width="1.8" opacity="0.60" filter="url(#rimF)"/>
 
-  <!-- === FORE-ARMS (raised, heraldic pose) === -->
-  <!-- Left arm -->
+  <!-- ========== SNOUT / JAW ========== -->
   <path d="
-    M 204,240
-    C 184,242 160,254 142,268
-    C 128,280 122,294 128,308
-    C 116,296 118,278 134,264
-    C 150,248 176,236 200,234
-    Z
-  " fill="url(#bodyFill)"/>
-  <!-- Left fore-claw -->
-  <path d="M 128,308 C 120,318 114,330 112,342 C 118,330 126,320 134,314 C 122,324 118,336 120,348 C 124,334 132,322 142,316 C 132,326 130,340 134,350 C 138,336 148,324 158,320" 
-        fill="none" stroke="#FF4400" stroke-width="2" opacity="0.55" stroke-linecap="round"/>
-
-  <!-- Right arm -->
-  <path d="
-    M 308,240
-    C 328,242 352,254 370,268
-    C 384,280 390,294 384,308
-    C 396,296 394,278 378,264
-    C 362,248 336,236 312,234
-    Z
-  " fill="url(#bodyFill)"/>
-  <!-- Right fore-claw -->
-  <path d="M 384,308 C 392,318 398,330 400,342 C 394,330 386,320 378,314 C 390,324 394,336 392,348 C 388,334 380,322 370,316 C 380,326 382,340 378,350 C 374,336 364,324 354,320" 
-        fill="none" stroke="#FF4400" stroke-width="2" opacity="0.55" stroke-linecap="round"/>
-
-  <!-- === NECK === -->
-  <path d="
-    M 228,160
-    C 220,148 220,128 228,116
-    L 256,112
-    L 284,116
-    C 292,128 292,148 284,160
-    Z
-  " fill="url(#bodyFill)"/>
-
-  <!-- === HEAD === -->
-  <!-- Head shape -->
-  <path d="
-    M 256,80
-    C 278,80 298,90 308,106
-    C 318,120 318,140 310,156
-    C 302,170 286,178 268,180
-    L 256,182
-    L 244,180
-    C 226,178 210,170 202,156
-    C 194,140 194,120 204,106
-    C 214,90 234,80 256,80 Z
-  " fill="url(#bodyFill)"/>
-  <!-- Head rim glow -->
-  <path d="
-    M 256,80
-    C 278,80 298,90 308,106
-    C 318,120 318,140 310,156
-    C 302,170 286,178 268,180
-    L 256,182 L 244,180
-    C 226,178 210,170 202,156
-    C 194,140 194,120 204,106
-    C 214,90 234,80 256,80 Z
-  " fill="none" stroke="#FF5500" stroke-width="2.2" opacity="0.62"
-    filter="url(#edgeGlow)"/>
-
-  <!-- === HORNS === -->
-  <!-- Left horn -->
-  <path d="M 230,88 L 206,32 L 222,84 Z" fill="#120500"/>
-  <path d="M 230,88 L 206,32 L 222,84 Z" fill="none"
-        stroke="#FF4400" stroke-width="1.5" opacity="0.55" filter="url(#edgeGlow)"/>
-  <!-- Right horn -->
-  <path d="M 282,88 L 306,32 L 290,84 Z" fill="#120500"/>
-  <path d="M 282,88 L 306,32 L 290,84 Z" fill="none"
-        stroke="#FF4400" stroke-width="1.5" opacity="0.55" filter="url(#edgeGlow)"/>
-
-  <!-- === SNOUT === -->
-  <path d="
-    M 234,166
-    C 238,174 246,180 256,180
-    C 266,180 274,174 278,166
-    L 284,172 L 280,182
-    C 276,192 268,196 256,196
-    C 244,196 236,192 232,182
-    L 228,172 Z
+    M 234,192 C 238,200 246,206 256,207
+    C 266,206 274,200 278,192
+    L 283,198 C 279,210 268,216 256,216
+    C 244,216 233,210 229,198 Z
   " fill="#0a0200"/>
   <!-- Nostrils -->
-  <ellipse cx="244" cy="186" rx="5" ry="3.5" fill="#070100" transform="rotate(-12 244 186)"/>
-  <ellipse cx="268" cy="186" rx="5" ry="3.5" fill="#070100" transform="rotate(12 268 186)"/>
+  <ellipse cx="243" cy="197" rx="5.5" ry="3.5" fill="#060100" transform="rotate(-14 243 197)"/>
+  <ellipse cx="269" cy="197" rx="5.5" ry="3.5" fill="#060100" transform="rotate(14 269 197)"/>
 
-  <!-- === BROW (angry furrowed) === -->
-  <path d="M 216,110 L 238,100 L 252,106" fill="none"
-        stroke="#FF4400" stroke-width="2.8" stroke-linecap="round" opacity="0.55"/>
-  <path d="M 296,110 L 274,100 L 260,106" fill="none"
-        stroke="#FF4400" stroke-width="2.8" stroke-linecap="round" opacity="0.55"/>
+  <!-- ========== BROW RIDGES (V-shape, angry) ========== -->
+  <path d="M 203,126 L 224,112 L 246,120" fill="none"
+    stroke="#FF4400" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/>
+  <path d="M 309,126 L 288,112 L 266,120" fill="none"
+    stroke="#FF4400" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/>
 
-  <!-- === EYES === -->
-  <!-- Left eye halo -->
-  <ellipse cx="232" cy="132" rx="20" ry="16"
-           fill="#FF6600" opacity="0.24" filter="url(#bloom)"/>
-  <!-- Left eye iris -->
-  <ellipse cx="232" cy="132" rx="16" ry="13" fill="url(#eyeG)" filter="url(#softBloom)"/>
-  <!-- Left slit pupil -->
-  <ellipse cx="232" cy="132" rx="4" ry="11" fill="#030008"/>
+  <!-- ========== EYES ========== -->
+  <!-- Left halo -->
+  <ellipse cx="232" cy="150" rx="24" ry="18" fill="#FF6600" opacity="0.30" filter="url(#eyeBloom)"/>
+  <!-- Left iris -->
+  <ellipse cx="232" cy="150" rx="17" ry="13" fill="url(#eyeG)" filter="url(#eyeBloom)"/>
+  <!-- Left pupil slit -->
+  <ellipse cx="232" cy="150" rx="4.5" ry="11" fill="#020006"/>
   <!-- Left specular -->
-  <ellipse cx="227" cy="125" rx="5" ry="3" fill="white" opacity="0.22"
-           transform="rotate(-18 227 125)"/>
-  <!-- Left eye rim -->
-  <ellipse cx="232" cy="132" rx="16" ry="13" fill="none"
-           stroke="#FF9900" stroke-width="1.3" opacity="0.50"/>
+  <ellipse cx="226" cy="143" rx="5.5" ry="3" fill="white" opacity="0.24" transform="rotate(-16 226 143)"/>
+  <!-- Left outline -->
+  <ellipse cx="232" cy="150" rx="17" ry="13" fill="none" stroke="#FF8800" stroke-width="1.4" opacity="0.54"/>
 
-  <!-- Right eye halo -->
-  <ellipse cx="280" cy="132" rx="20" ry="16"
-           fill="#FF6600" opacity="0.24" filter="url(#bloom)"/>
-  <!-- Right eye iris -->
-  <ellipse cx="280" cy="132" rx="16" ry="13" fill="url(#eyeG)" filter="url(#softBloom)"/>
-  <!-- Right slit pupil -->
-  <ellipse cx="280" cy="132" rx="4" ry="11" fill="#030008"/>
+  <!-- Right halo -->
+  <ellipse cx="280" cy="150" rx="24" ry="18" fill="#FF6600" opacity="0.30" filter="url(#eyeBloom)"/>
+  <!-- Right iris -->
+  <ellipse cx="280" cy="150" rx="17" ry="13" fill="url(#eyeG)" filter="url(#eyeBloom)"/>
+  <!-- Right pupil slit -->
+  <ellipse cx="280" cy="150" rx="4.5" ry="11" fill="#020006"/>
   <!-- Right specular -->
-  <ellipse cx="275" cy="125" rx="5" ry="3" fill="white" opacity="0.22"
-           transform="rotate(-18 275 125)"/>
-  <!-- Right eye rim -->
-  <ellipse cx="280" cy="132" rx="16" ry="13" fill="none"
-           stroke="#FF9900" stroke-width="1.3" opacity="0.50"/>
+  <ellipse cx="274" cy="143" rx="5.5" ry="3" fill="white" opacity="0.24" transform="rotate(-16 274 143)"/>
+  <!-- Right outline -->
+  <ellipse cx="280" cy="150" rx="17" ry="13" fill="none" stroke="#FF8800" stroke-width="1.4" opacity="0.54"/>
 
-  <!-- === SPINE RIDGES (decorative) === -->
-  <path d="M 256,140 L 248,120 L 256,130 L 264,120 Z" fill="#FF4400" opacity="0.45"/>
-  <path d="M 256,188 L 248,170 L 256,180 L 264,170 Z" fill="#FF4400" opacity="0.35"/>
-  <path d="M 256,240 L 247,218 L 256,230 L 265,218 Z" fill="#FF3300" opacity="0.25"/>
-  <path d="M 256,292 L 247,272 L 256,283 L 265,272 Z" fill="#FF2200" opacity="0.18"/>
+  <!-- ========== SPINE RIDGES ========== -->
+  <polygon points="250,97  245,74 256,93"  fill="#FF5500" opacity="0.55"/>
+  <polygon points="256,92  252,68 260,90"  fill="#FF5500" opacity="0.62"/>
+  <polygon points="262,97  259,74 267,93"  fill="#FF5500" opacity="0.55"/>
+  <polygon points="250,217 246,238 256,228 266,238 262,217" fill="#FF3300" opacity="0.30"/>
+  <polygon points="250,280 246,302 256,292 266,302 262,280" fill="#FF2200" opacity="0.20"/>
+  <polygon points="250,350 246,372 256,362 266,372 262,350" fill="#FF1100" opacity="0.13"/>
 
-  <!-- === FRAME === -->
+  <!-- ========== TAIL ========== -->
+  <path d="
+    M 296,448
+    C 322,458 354,460 376,442
+    C 396,424 396,402 380,392
+    C 364,382 348,392 346,408
+    C 344,422 356,430 370,426 L 380,418
+  " fill="none" stroke="#0e0300" stroke-width="24" stroke-linecap="round"/>
+  <path d="
+    M 296,448
+    C 322,458 354,460 376,442
+    C 396,424 396,402 380,392
+    C 364,382 348,392 346,408
+    C 344,422 356,430 370,426 L 380,418
+  " fill="none" stroke="#FF3300" stroke-width="1.8" opacity="0.38" stroke-linecap="round"/>
+
+  <!-- ========== LEGS + CLAWS ========== -->
+  <!-- Left leg -->
+  <path d="M 216,442 C 208,455 200,468 194,478
+    C 206,484 220,480 228,470
+    C 232,480 238,488 248,484
+    C 244,472 238,460 232,448 Z" fill="#0d0200"/>
+  <path d="M 216,442 C 208,455 200,468 194,478 C 206,484 220,480 228,470 C 232,480 238,488 248,484 C 244,472 238,460 232,448 Z"
+    fill="none" stroke="#FF3300" stroke-width="1.2" opacity="0.32"/>
+  <!-- Right leg -->
+  <path d="M 296,442 C 304,455 312,468 318,478
+    C 306,484 292,480 284,470
+    C 280,480 274,488 264,484
+    C 268,472 274,460 280,448 Z" fill="#0d0200"/>
+  <path d="M 296,442 C 304,455 312,468 318,478 C 306,484 292,480 284,470 C 280,480 274,488 264,484 C 268,472 274,460 280,448 Z"
+    fill="none" stroke="#FF3300" stroke-width="1.2" opacity="0.32"/>
+
+  <!-- Frame -->
   <rect width="512" height="512" rx="88" fill="none"
-        stroke="#FF3300" stroke-width="2.5" opacity="0.15"/>
+    stroke="#FF2200" stroke-width="2.5" opacity="0.14"/>
 </svg>
