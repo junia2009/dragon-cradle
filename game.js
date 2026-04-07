@@ -902,14 +902,14 @@ function runBattleTurn() {
       const dmg = Math.max(1, Math.floor((ps.atk - es.def) * mult));
       battleState.enemyHP = Math.max(0, battleState.enemyHP - dmg);
       const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
-      addBattleLog(`▶ ${ATTR[state.attr].name}の攻撃！ ${dmg} ダメージ${multText}`);
+      addBattleLog(`▶ ${dmg}ダメージ${multText}`);
       flashDragon(enemyDragonGroup);
     } else {
       const mult = getAttrMultiplier(battleState.enemyAttr, state.attr);
       const dmg = Math.max(1, Math.floor((es.atk - ps.def) * mult));
       battleState.playerHP = Math.max(0, battleState.playerHP - dmg);
       const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
-      addBattleLog(`◀ ${ATTR[battleState.enemyAttr].name}の攻撃！ ${dmg} ダメージ${multText}`);
+      addBattleLog(`◀ ${dmg}ダメージ${multText}`);
       flashDragon(playerDragonGroup);
     }
     updateBattleUI();
@@ -955,10 +955,10 @@ function endBattle(win) {
     const gained = Math.round((battleScore + streakBonus) * (statBonus / 30));
     state.score += gained;
 
-    addBattleLog(`--- 🏆 勝利！ +${gained}pt ---`);
+    addBattleLog(`🏆 勝利！ +${gained}pt`);
     showBattleResult(true, gained);
   } else {
-    addBattleLog('--- 💀 敗北… ---');
+    addBattleLog('💀 敗北…');
     showBattleResult(false, 0);
     state.streak = 0;
   }

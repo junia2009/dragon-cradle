@@ -346,30 +346,32 @@ html, body {
 }
 
 .battle-log {
-  width: 100%;
-  max-width: 460px;
-  flex: 1;
-  min-height: 120px;
-  max-height: 260px;
+  position: absolute;
+  bottom: calc(3.8rem + max(0.3rem, env(safe-area-inset-bottom, 0px)));
+  right: 1rem;
+  width: 170px;
+  max-height: 200px;
   overflow-y: auto;
-  background: rgba(7,11,20,0.8);
+  background: rgba(7,11,20,0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 10px;
-  padding: 0.7rem 1rem;
-  font-size: 0.9rem;
-  line-height: 1.6;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.78rem;
+  line-height: 1.5;
   color: var(--text-main);
-  /* モバイルブラウザのフォント自動拡大を抑止 */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  z-index: 10;
 }
 .battle-log::-webkit-scrollbar { width: 4px; }
 .battle-log::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
 
 /* バトルログ各行：フォントサイズを明示して自動拡大を防ぐ */
 .battle-log-line {
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: 0.78rem;
+  line-height: 1.5;
 }
 
 .battle-result {
