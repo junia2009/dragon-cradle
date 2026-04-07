@@ -21,7 +21,7 @@ async function main() {
     await sharp(SRC)
       .resize(inner, inner)
       .extend({ top: pad, bottom: pad, left: pad, right: pad,
-                background: { r: 7, g: 11, b: 20, alpha: 1 } })
+                background: { r: 4, g: 1, b: 2, alpha: 1 } })
       .png()
       .toFile(path.join(__dirname, 'icons', `icon-maskable-${size}.png`));
     console.log(`icon-maskable-${size}.png`);
