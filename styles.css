@@ -835,7 +835,7 @@ html, body {
   .raise-ui {
     padding-left:   max(1.5rem, env(safe-area-inset-left));
     padding-right:  max(1.5rem, env(safe-area-inset-right));
-    padding-bottom: max(0.8rem, env(safe-area-inset-bottom));
+    padding-bottom: calc(3.4rem + max(0.3rem, env(safe-area-inset-bottom)));
   }
   .stats-panel {
     right: max(1rem, env(safe-area-inset-right));
