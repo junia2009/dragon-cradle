@@ -88,6 +88,15 @@ html, body {
   letter-spacing: 0.15em;
 }
 
+.game-version {
+  font-family: var(--font-title);
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.2em;
+  margin-top: -0.4rem;
+  margin-bottom: 0.2rem;
+}
+
 .attribute-cards {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -243,6 +252,13 @@ html, body {
   pointer-events: none;
 }
 .raise-ui > * { pointer-events: all; }
+
+.raise-version {
+  font-family: var(--font-title);
+  font-size: 0.52rem;
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 0.15em;
+}
 
 /* 左上：属性ラベル */
 .raise-top {
@@ -972,6 +988,14 @@ html, body {
   letter-spacing: 0.2em;
   text-align: center;
   margin-top: -1.4rem;
+}
+.orient-version {
+  font-family: var(--font-title);
+  font-size: 0.55rem;
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 0.2em;
+  text-align: center;
+  margin-top: 0.8rem;
 }
 
 @keyframes orient-phone-spin {

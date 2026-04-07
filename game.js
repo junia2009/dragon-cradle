@@ -429,6 +429,8 @@ let dragonGroup = null;
 let attrEffectParticles = [];
 let raiseIdleTimer = null;
 let staRecoverTimer = null;
+let staCountdownTimer = null;
+let staNextRecovery = 0; // 次回スタミナ回復の予定時刻(ms)
 
 function initRaiseScene(attr) {
   const canvas = document.getElementById('raise-canvas');
@@ -475,13 +477,25 @@ function initRaiseScene(attr) {
 
   // スタミナ回復タイマー
   clearInterval(staRecoverTimer);
+  clearInterval(staCountdownTimer);
+  if (state.stamina < STA_MAX && staNextRecovery === 0) {
+    staNextRecovery = Date.now() + STA_RECOVER_MS;
+  }
   staRecoverTimer = setInterval(() => {
     if (state.stamina < STA_MAX) {
       state.stamina = Math.min(STA_MAX, state.stamina + 1);
+      staNextRecovery = state.stamina < STA_MAX ? Date.now() + STA_RECOVER_MS : 0;
       updateStaminaUI();
       saveGame();
     }
   }, STA_RECOVER_MS);
+  // 毎秒カウントダウン更新
+  staCountdownTimer = setInterval(() => {
+    const timeEl = document.getElementById('sta-recover-time');
+    if (!timeEl || state.stamina >= STA_MAX) { timeEl && (timeEl.textContent = ''); return; }
+    const rem = Math.max(0, Math.ceil((staNextRecovery - Date.now()) / 1000));
+    timeEl.textContent = `${rem}s`;
+  }, 1000);
 
   setupRaiseButtons(attr);
   updateRaiseUI();
@@ -728,6 +742,9 @@ function doAction(type) {
     return;
   }
   state.stamina--;
+  if (state.stamina < STA_MAX && staNextRecovery === 0) {
+    staNextRecovery = Date.now() + STA_RECOVER_MS;
+  }
 
   const mult = rollTrainingMult();
   let growPt = 0;
@@ -784,7 +801,12 @@ function updateStaminaUI() {
   }
   const timeEl = document.getElementById('sta-recover-time');
   if (!timeEl) return;
-  timeEl.textContent = state.stamina >= STA_MAX ? '' : `(${Math.ceil(STA_RECOVER_MS / 1000)}s/回復)`;
+  if (state.stamina >= STA_MAX) {
+    timeEl.textContent = '';
+  } else {
+    const rem = Math.max(0, Math.ceil((staNextRecovery - Date.now()) / 1000));
+    timeEl.textContent = `${rem}s`;
+  }
 }
 
 function updateDragonType() {
