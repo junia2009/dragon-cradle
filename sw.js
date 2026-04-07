@@ -4,19 +4,19 @@
    ============================================================ */
 'use strict';
 
-const CACHE_NAME = 'dragon-cradle-v1';
+const CACHE_NAME = 'dragon-cradle-v2';
 
 const PRECACHE_ASSETS = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/game.js',
-  '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/icon-maskable-192.png',
-  '/icons/icon-maskable-512.png',
-  '/icons/apple-touch-icon.png',
+  './',
+  './index.html',
+  './styles.css',
+  './game.js',
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-maskable-512.png',
+  './icons/apple-touch-icon.png',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
   'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@400;700&display=swap',
 ];
@@ -62,7 +62,7 @@ self.addEventListener('fetch', event => {
       }).catch(() => {
         // Offline fallback for navigate requests
         if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
+          return caches.match('./index.html');
         }
       });
     })

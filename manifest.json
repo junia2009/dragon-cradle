@@ -2,7 +2,7 @@
   "name": "Dragon Cradle",
   "short_name": "DragonCradle",
   "description": "ドラゴンを育てて戦わせる育成バトルゲーム",
-  "start_url": "/",
+  "start_url": ".",
   "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#070b14",
