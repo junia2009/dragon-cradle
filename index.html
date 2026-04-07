@@ -68,33 +68,39 @@
   <!-- ========== 育成画面 ========== -->
   <div id="screen-raise" class="screen">
     <canvas id="raise-canvas"></canvas>
+
+    <!-- 左上：属性・ステージラベル -->
+    <div class="raise-top">
+      <h2 id="raise-attr-label" class="attr-label"></h2>
+      <div id="raise-stage-label" class="stage-label"></div>
+    </div>
+
+    <!-- 右上：ステータスパネル（小） -->
+    <div class="stats-panel">
+      <div class="stat-row">
+        <span class="stat-name">HP</span>
+        <div class="stat-bar-wrap"><div id="stat-hp-bar" class="stat-bar"></div></div>
+        <span id="stat-hp-val" class="stat-val">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-name">ATK</span>
+        <div class="stat-bar-wrap"><div id="stat-atk-bar" class="stat-bar"></div></div>
+        <span id="stat-atk-val" class="stat-val">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-name">DEF</span>
+        <div class="stat-bar-wrap"><div id="stat-def-bar" class="stat-bar"></div></div>
+        <span id="stat-def-val" class="stat-val">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-name">SPD</span>
+        <div class="stat-bar-wrap"><div id="stat-spd-bar" class="stat-bar"></div></div>
+        <span id="stat-spd-val" class="stat-val">0</span>
+      </div>
+    </div>
+
+    <!-- 下部：育成ボタン群 -->
     <div class="raise-ui">
-      <div class="raise-top">
-        <h2 id="raise-attr-label" class="attr-label"></h2>
-        <div id="raise-stage-label" class="stage-label"></div>
-      </div>
-      <div class="stats-panel">
-        <div class="stat-row">
-          <span class="stat-name">HP</span>
-          <div class="stat-bar-wrap"><div id="stat-hp-bar" class="stat-bar"></div></div>
-          <span id="stat-hp-val" class="stat-val">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">ATK</span>
-          <div class="stat-bar-wrap"><div id="stat-atk-bar" class="stat-bar"></div></div>
-          <span id="stat-atk-val" class="stat-val">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">DEF</span>
-          <div class="stat-bar-wrap"><div id="stat-def-bar" class="stat-bar"></div></div>
-          <span id="stat-def-val" class="stat-val">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">SPD</span>
-          <div class="stat-bar-wrap"><div id="stat-spd-bar" class="stat-bar"></div></div>
-          <span id="stat-spd-val" class="stat-val">0</span>
-        </div>
-      </div>
       <div class="growth-gauge-wrap">
         <div class="gauge-label">成長ゲージ <span id="raise-stage-progress"></span></div>
         <div class="gauge-bar">
