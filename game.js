@@ -428,7 +428,6 @@ let raiseScene, raiseCamera, raiseRenderer, raiseAnimId;
 let dragonGroup = null;
 let attrEffectParticles = [];
 let raiseIdleTimer = null;
-let staRecoverTimer = null;
 let staCountdownTimer = null;
 let staNextRecovery = 0; // 次回スタミナ回復の予定時刻(ms)
 
@@ -475,26 +474,30 @@ function initRaiseScene(attr) {
     if (state.stage === 'baby') addGrowthPt(1);
   }, RAISE_IDLE);
 
-  // スタミナ回復タイマー
-  clearInterval(staRecoverTimer);
+  // スタミナ回復タイマー（1秒ごとに回復判定＋カウントダウン表示を両方処理）
   clearInterval(staCountdownTimer);
   if (state.stamina < STA_MAX && staNextRecovery === 0) {
     staNextRecovery = Date.now() + STA_RECOVER_MS;
   }
-  staRecoverTimer = setInterval(() => {
-    if (state.stamina < STA_MAX) {
+  staCountdownTimer = setInterval(() => {
+    const timeEl = document.getElementById('sta-recover-time');
+    if (state.stamina >= STA_MAX) {
+      staNextRecovery = 0;
+      if (timeEl) timeEl.textContent = '';
+      return;
+    }
+    // 回復時刻に達していたらスタミナを回復
+    if (staNextRecovery > 0 && Date.now() >= staNextRecovery) {
       state.stamina = Math.min(STA_MAX, state.stamina + 1);
       staNextRecovery = state.stamina < STA_MAX ? Date.now() + STA_RECOVER_MS : 0;
       updateStaminaUI();
       saveGame();
     }
-  }, STA_RECOVER_MS);
-  // 毎秒カウントダウン更新
-  staCountdownTimer = setInterval(() => {
-    const timeEl = document.getElementById('sta-recover-time');
-    if (!timeEl || state.stamina >= STA_MAX) { timeEl && (timeEl.textContent = ''); return; }
-    const rem = Math.max(0, Math.ceil((staNextRecovery - Date.now()) / 1000));
-    timeEl.textContent = `${rem}s`;
+    // カウントダウン表示
+    if (timeEl) {
+      const rem = Math.max(0, Math.ceil((staNextRecovery - Date.now()) / 1000));
+      timeEl.textContent = state.stamina >= STA_MAX ? '' : `${rem}s`;
+    }
   }, 1000);
 
   setupRaiseButtons(attr);
