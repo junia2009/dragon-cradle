@@ -144,11 +144,11 @@ html, body {
   height: 100%;
 }
 
-/* 育成キャンバスはサイドバー右側に配置 */
+/* 育成キャンバスはサイドバー左側に配置 */
 #raise-canvas {
   position: absolute;
   top: 0;
-  left: 190px;
+  left: 0;
   width: calc(100% - 190px);
   height: 100%;
   display: block;
@@ -237,22 +237,22 @@ html, body {
    育成画面 UI
    ============================================================ */
 
-/* ---- 左サイドバー ---- */
+/* ---- 右サイドバー ---- */
 .raise-sidebar {
   position: absolute;
   top: 0;
-  left: 0;
+  right: 0;
   bottom: 3rem;
   z-index: 10;
   width: 190px;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  padding: 1rem 1rem 1rem 1.2rem;
-  background: linear-gradient(135deg, rgba(7,11,20,0.85) 0%, rgba(13,20,37,0.75) 100%);
-  backdrop-filter: blur(16px);
+  padding: 1rem 1.2rem 1rem 1rem;
+  background: linear-gradient(225deg, rgba(7,11,20,0.85) 0%, rgba(13,20,37,0.75) 100%);
   -webkit-backdrop-filter: blur(16px);
-  border-right: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(16px);
+  border-left: 1px solid rgba(255,255,255,0.08);
   pointer-events: all;
 }
 
@@ -264,14 +264,14 @@ html, body {
 
 .sidebar-divider {
   height: 1px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.15), transparent);
+  background: linear-gradient(270deg, rgba(255,255,255,0.15), transparent);
   margin: 0.1rem 0;
 }
 
 .raise-version {
   position: absolute;
   bottom: 3.4rem;
-  left: 1.2rem;
+  right: 1.2rem;
   z-index: 10;
   font-family: var(--font-title);
   font-size: 0.48rem;
@@ -341,8 +341,8 @@ html, body {
 .raise-action-bar {
   position: absolute;
   bottom: 3rem;
-  left: 190px;
-  right: 0;
+  left: 0;
+  right: 190px;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -890,7 +890,7 @@ html, body {
   }
   /* 育成UI：safe-area対応 */
   .raise-sidebar {
-    padding-left:  max(1.2rem, env(safe-area-inset-left));
+    padding-right: max(1.2rem, env(safe-area-inset-right));
     padding-top:   max(1rem, env(safe-area-inset-top));
   }
   .raise-action-bar {
@@ -898,7 +898,7 @@ html, body {
     padding-right:  max(1.2rem, env(safe-area-inset-right));
   }
   .raise-version {
-    left: max(1.2rem, env(safe-area-inset-left));
+    right: max(1.2rem, env(safe-area-inset-right));
   }
   .screen-select-inner {
     padding-left:  max(2rem, env(safe-area-inset-left));
@@ -917,11 +917,12 @@ html, body {
     gap: 0.35rem;
   }
   #raise-canvas {
-    left: 155px;
+    left: 0;
     width: calc(100% - 155px);
   }
   .raise-action-bar {
-    left: 155px;
+    left: 0;
+    right: 155px;
     padding: 0.4rem 0.8rem;
   }
   .raise-act { padding: 0.35rem 0.4rem; font-size: 0.75rem; }
