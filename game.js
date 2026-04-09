@@ -446,15 +446,15 @@ function initRaiseScene(attr) {
 
   // CSS レイアウト確定後にキャンバスサイズを取得
   requestAnimationFrame(() => {
-    const W = window.innerWidth;
-    const H = window.innerHeight;
+    const W = canvas.clientWidth  || window.innerWidth;
+    const H = canvas.clientHeight || window.innerHeight;
 
   raiseScene = new THREE.Scene();
   raiseScene.fog = new THREE.FogExp2(ATTR[attr].fogColor, 0.02);
 
   raiseCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
-  raiseCamera.position.set(1.2, 1, 10);
-  raiseCamera.lookAt(1.2, 0, 0);
+  raiseCamera.position.set(0, 1, 10);
+  raiseCamera.lookAt(0, 0, 0);
 
   raiseRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   raiseRenderer.setSize(W, H, false);

@@ -144,11 +144,12 @@ html, body {
   height: 100%;
 }
 
-/* 育成キャンバスは全画面 */
+/* 育成キャンバスはサイドバー右側に配置 */
 #raise-canvas {
   position: absolute;
-  inset: 0;
-  width: 100%;
+  top: 0;
+  left: 190px;
+  width: calc(100% - 190px);
   height: 100%;
   display: block;
 }
@@ -914,6 +915,10 @@ html, body {
     width: 155px;
     padding: 0.6rem 0.7rem 0.6rem 0.8rem;
     gap: 0.35rem;
+  }
+  #raise-canvas {
+    left: 155px;
+    width: calc(100% - 155px);
   }
   .raise-action-bar {
     left: 155px;
