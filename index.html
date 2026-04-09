@@ -28,7 +28,7 @@
   <div id="screen-select" class="screen active">
     <div class="screen-select-inner">
       <h1 class="game-title">DRAGON<br><span>CRADLE</span></h1>
-      <p class="game-version">v1.5.3</p>
+      <p class="game-version">v1.6.0</p>
       <p class="subtitle">卵の属性を選んでください</p>
       <div class="attribute-cards">
         <button class="attr-card" data-attr="fire">
@@ -88,58 +88,70 @@
   <div id="screen-raise" class="screen">
     <canvas id="raise-canvas"></canvas>
 
-    <!-- 左上：属性・ステージラベル -->
-    <div class="raise-top">
-      <h2 id="raise-attr-label" class="attr-label"></h2>
-      <div id="raise-stage-label" class="stage-label"></div>
-    </div>
+    <!-- フローティング：アクションフィードバック -->
+    <div id="action-feedback" class="action-feedback"></div>
 
-    <!-- 右上：ステータスパネル（小） -->
-    <div class="stats-panel">
-      <div class="stat-row">
-        <span class="stat-name">HP</span>
-        <div class="stat-bar-wrap"><div id="stat-hp-bar" class="stat-bar"></div></div>
-        <span id="stat-hp-val" class="stat-val">0</span>
+    <!-- 左サイドバー：情報パネル -->
+    <div class="raise-sidebar">
+      <div class="raise-info-header">
+        <h2 id="raise-attr-label" class="attr-label"></h2>
+        <div id="raise-stage-label" class="stage-label"></div>
       </div>
-      <div class="stat-row">
-        <span class="stat-name">ATK</span>
-        <div class="stat-bar-wrap"><div id="stat-atk-bar" class="stat-bar"></div></div>
-        <span id="stat-atk-val" class="stat-val">0</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-name">DEF</span>
-        <div class="stat-bar-wrap"><div id="stat-def-bar" class="stat-bar"></div></div>
-        <span id="stat-def-val" class="stat-val">0</span>
-      </div>
-      <div class="stat-row">
-        <span class="stat-name">SPD</span>
-        <div class="stat-bar-wrap"><div id="stat-spd-bar" class="stat-bar"></div></div>
-        <span id="stat-spd-val" class="stat-val">0</span>
-      </div>
-    </div>
 
-    <!-- 下部：育成ボタン群 -->
-    <div class="raise-ui">
-      <div id="action-feedback" class="action-feedback"></div>
+      <div class="stats-panel">
+        <div class="stat-row">
+          <span class="stat-name">HP</span>
+          <div class="stat-bar-wrap"><div id="stat-hp-bar" class="stat-bar"></div></div>
+          <span id="stat-hp-val" class="stat-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">ATK</span>
+          <div class="stat-bar-wrap"><div id="stat-atk-bar" class="stat-bar"></div></div>
+          <span id="stat-atk-val" class="stat-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">DEF</span>
+          <div class="stat-bar-wrap"><div id="stat-def-bar" class="stat-bar"></div></div>
+          <span id="stat-def-val" class="stat-val">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-name">SPD</span>
+          <div class="stat-bar-wrap"><div id="stat-spd-bar" class="stat-bar"></div></div>
+          <span id="stat-spd-val" class="stat-val">0</span>
+        </div>
+      </div>
+
+      <div class="sidebar-divider"></div>
+
       <div class="growth-gauge-wrap">
-        <div class="gauge-label">成長ゲージ <span id="raise-stage-progress"></span></div>
+        <div class="gauge-label">成長 <span id="raise-stage-progress"></span></div>
         <div class="gauge-bar">
           <div id="raise-gauge-fill" class="gauge-fill"></div>
         </div>
       </div>
-      <div class="action-buttons">
-        <button class="action-btn" id="btn-feed">🍖 えさ</button>
-        <button class="action-btn" id="btn-train-atk">⚔️ 攻撃鍛錬</button>
-        <button class="action-btn" id="btn-train-def">🛡️ 守り鍛錬</button>
-        <button class="action-btn" id="btn-train-spd">🏃 速さ鍛錬</button>
-      </div>      <div class="stamina-wrap">
-        <span class="sta-label">STA</span>
-        <div id="stamina-dots" class="stamina-dots"></div>
-        <span id="sta-recover-time" class="sta-recover-time"></span>
-      </div>      <div id="dragon-type-label" class="dragon-type-label"></div>
-      <button class="battle-btn" id="btn-go-battle">⚔️ バトルに出撃！</button>
-      <span class="raise-version">v1.5.3</span>
+
+      <div id="dragon-type-label" class="dragon-type-label"></div>
     </div>
+
+    <!-- 下部アクションバー -->
+    <div class="raise-action-bar">
+      <div class="raise-actions-group">
+        <div class="stamina-wrap">
+          <span class="sta-label">STA</span>
+          <div id="stamina-dots" class="stamina-dots"></div>
+          <span id="sta-recover-time" class="sta-recover-time"></span>
+        </div>
+        <div class="action-buttons">
+          <button class="action-btn raise-act" id="btn-feed">🍖 えさ</button>
+          <button class="action-btn raise-act" id="btn-train-atk">⚔️ 攻撃鍛錬</button>
+          <button class="action-btn raise-act" id="btn-train-def">🛡️ 守り鍛錬</button>
+          <button class="action-btn raise-act" id="btn-train-spd">🏃 速さ鍛錬</button>
+        </div>
+      </div>
+      <button class="battle-btn" id="btn-go-battle">⚔️ 出撃</button>
+    </div>
+
+    <span class="raise-version">v1.6.0</span>
   </div>
 
   <!-- ========== バトル画面 ========== -->
@@ -229,7 +241,7 @@
       </div>
       <p class="orient-msg">横画面にしてね！</p>
       <p class="orient-sub">ROTATE DEVICE TO LANDSCAPE</p>
-      <p class="orient-version">v1.5.3</p>
+      <p class="orient-version">v1.6.0</p>
     </div>
   </div>
 
