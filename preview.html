@@ -120,6 +120,17 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   <span class="pv-spacer"></span>
   <button id="pv-btn-wireframe">ワイヤーフレーム</button>
   <button id="pv-btn-reset-cam">カメラリセット</button>
+  <span class="pv-spacer"></span>
+  <label>背景:</label>
+  <button data-pv-bg="preview" class="active">プレビュー</button>
+  <button data-pv-bg="raise">育成</button>
+  <button data-pv-bg="battle">戦闘</button>
+  <span class="pv-spacer"></span>
+  <label>BGM:</label>
+  <button data-pv-bgm="stop" class="active">停止</button>
+  <button data-pv-bgm="title">タイトル</button>
+  <button data-pv-bgm="raise">育成</button>
+  <button data-pv-bgm="battle">戦闘</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -165,18 +176,29 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   pvControls.dampingFactor = 0.08;
 
   // ライト
-  pvScene.add(new THREE.AmbientLight(0x404060, 0.6));
+  const pvAmbient = new THREE.AmbientLight(0x404060, 0.6);
+  pvScene.add(pvAmbient);
   const d1 = new THREE.DirectionalLight(0xffffff, 0.8);
   d1.position.set(5, 10, 7);
   pvScene.add(d1);
   const d2 = new THREE.DirectionalLight(0x6688cc, 0.3);
   d2.position.set(-3, 5, -5);
   pvScene.add(d2);
+  let pvHemi = null;
 
   // グリッド
   const grid = new THREE.GridHelper(10, 20, 0x333355, 0x222244);
   grid.position.y = -1;
   pvScene.add(grid);
+
+  // 地面（育成/戦闘背景用、初期非表示）
+  const groundGeo = new THREE.PlaneGeometry(60, 60);
+  const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.9, metalness: 0.1 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -1;
+  ground.visible = false;
+  pvScene.add(ground);
 
   let currentModel = null;
   let pvAttr = 'fire';
@@ -207,6 +229,9 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
       btn.classList.add('active');
       pvAttr = btn.dataset.pvAttr;
       loadModel();
+      // 育成背景が選択中なら背景色も更新
+      const activeBg = document.querySelector('[data-pv-bg].active');
+      if (activeBg && activeBg.dataset.pvBg === 'raise') applyBg('raise');
     });
   });
 
@@ -237,6 +262,68 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
     pvCamera.position.set(0, 2, 8);
     pvControls.target.set(0, 0.5, 0);
     pvControls.update();
+  });
+
+  // 背景切替
+  const defaultBg = 0x1a1a2e;
+  const battleBg = 0x1a1020;
+  function applyBg(mode) {
+    document.querySelectorAll('[data-pv-bg]').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-pv-bg="' + mode + '"]').classList.add('active');
+    if (mode === 'preview') {
+      pvScene.background = new THREE.Color(defaultBg);
+      pvScene.fog = null;
+      grid.visible = true;
+      ground.visible = false;
+      groundMat.color.set(defaultBg);
+      pvAmbient.color.set(0x404060); pvAmbient.intensity = 0.6;
+      if (pvHemi) { pvScene.remove(pvHemi); pvHemi = null; }
+    } else if (mode === 'raise') {
+      const bg = ATTR[pvAttr].raiseBg;
+      pvScene.background = new THREE.Color(bg);
+      pvScene.fog = new THREE.Fog(bg, 8, 25);
+      grid.visible = false;
+      ground.visible = true;
+      groundMat.color.set(bg);
+      pvAmbient.color.set(0x889aaa); pvAmbient.intensity = 1.2;
+      if (pvHemi) pvScene.remove(pvHemi);
+      pvHemi = new THREE.HemisphereLight(0xddeeff, 0x445566, 0.8);
+      pvScene.add(pvHemi);
+    } else if (mode === 'battle') {
+      pvScene.background = new THREE.Color(battleBg);
+      pvScene.fog = new THREE.Fog(battleBg, 8, 25);
+      grid.visible = false;
+      ground.visible = true;
+      groundMat.color.set(battleBg);
+      pvAmbient.color.set(0x889aaa); pvAmbient.intensity = 1.0;
+      if (pvHemi) pvScene.remove(pvHemi);
+      pvHemi = new THREE.HemisphereLight(0xddeeff, 0x445566, 0.6);
+      pvScene.add(pvHemi);
+    }
+  }
+  document.querySelectorAll('[data-pv-bg]').forEach(btn => {
+    btn.addEventListener('click', () => applyBg(btn.dataset.pvBg));
+  });
+
+  // BGM切替
+  let bgmActivated = false;
+  function activateBgm() {
+    if (bgmActivated) return;
+    bgmActivated = true;
+    const ctx = BGM.getCtx();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+  }
+  document.querySelectorAll('[data-pv-bgm]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      activateBgm();
+      document.querySelectorAll('[data-pv-bgm]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const mode = btn.dataset.pvBgm;
+      BGM.stop();
+      if (mode === 'title') BGM.playTitle();
+      else if (mode === 'raise') BGM.playRaise();
+      else if (mode === 'battle') BGM.playBattle();
+    });
   });
 
   // リサイズ

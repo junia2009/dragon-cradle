@@ -80,7 +80,7 @@ const BGM = (() => {
   let currentTrack = null;
   let currentNodes = [];
   let muted = false;
-  const VOLUME = 0.35;
+  const VOLUME = 0.3;
 
   function getCtx() {
     if (!ctx) {
@@ -99,22 +99,37 @@ const BGM = (() => {
     currentTrack = null;
   }
 
-  // 音を作るヘルパー
-  function osc(ac, type, freq, startT, dur, gainVal, dest) {
+  // ノート発音ヘルパー（アタック→サステイン→リリース）
+  function note(ac, type, freq, startT, dur, gainVal, dest) {
     const o = ac.createOscillator();
     const g = ac.createGain();
     o.type = type;
     o.frequency.value = freq;
     g.gain.setValueAtTime(0, startT);
-    g.gain.linearRampToValueAtTime(gainVal, startT + 0.05);
-    g.gain.setValueAtTime(gainVal, startT + dur - 0.08);
+    g.gain.linearRampToValueAtTime(gainVal, startT + 0.04);
+    g.gain.setValueAtTime(gainVal, startT + dur - 0.06);
     g.gain.linearRampToValueAtTime(0, startT + dur);
     o.connect(g);
     g.connect(dest);
     o.start(startT);
     o.stop(startT + dur);
     currentNodes.push(o);
-    return o;
+  }
+
+  // プラック音（ハープ/チェレスタ風）
+  function pluck(ac, freq, startT, decay, gainVal, dest) {
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0, startT);
+    g.gain.linearRampToValueAtTime(gainVal, startT + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.001, startT + decay);
+    o.connect(g);
+    g.connect(dest);
+    o.start(startT);
+    o.stop(startT + decay + 0.05);
+    currentNodes.push(o);
   }
 
   // リバーブ風エフェクト
@@ -125,177 +140,123 @@ const BGM = (() => {
     for (let ch = 0; ch < 2; ch++) {
       const data = buf.getChannelData(ch);
       for (let i = 0; i < len; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
       }
     }
     convolver.buffer = buf;
     return convolver;
   }
 
-  // === タイトル画面BGM：神秘的でゆったりした魔法の世界 ===
+  // リバーブ付きバス作成
+  function makeBus(ac, dryVal, wetVal) {
+    const rev = createReverb(ac);
+    rev.connect(masterGain);
+    const dry = ac.createGain();
+    dry.gain.value = dryVal;
+    dry.connect(masterGain);
+    const wet = ac.createGain();
+    wet.gain.value = wetVal;
+    wet.connect(rev);
+    const dest = ac.createGain();
+    dest.connect(dry);
+    dest.connect(wet);
+    return dest;
+  }
+
+  // === タイトル画面BGM：神秘的なチェレスタ + ゆったりしたパッド ===
   function playTitle() {
     if (currentTrack === 'title') return;
     stopAll();
     currentTrack = 'title';
     const ac = getCtx();
-    const rev = createReverb(ac);
-    rev.connect(masterGain);
-    const dry = ac.createGain();
-    dry.gain.value = 0.7;
-    dry.connect(masterGain);
-    const wet = ac.createGain();
-    wet.gain.value = 0.4;
-    wet.connect(rev);
-    const dest = ac.createGain();
-    dest.connect(dry);
-    dest.connect(wet);
+    const dest = makeBus(ac, 0.6, 0.4);
 
     const loopDur = 16;
-    function scheduleLoop() {
+    function scheduleLoop(startAt) {
       if (currentTrack !== 'title') return;
-      const t0 = ac.currentTime + 0.05;
+      const t0 = startAt || (ac.currentTime + 0.05);
 
-      // パッド（ストリングス風 — 重ねたサイン波+三角波）
-      const padNotes = [
-        { f: 130.81, d: 8 },   // C3
-        { f: 146.83, d: 8 },   // D3
-        { f: 164.81, d: 8 },   // E3
-        { f: 174.61, d: 8 },   // F3
+      // ゆったりしたベースパッド（1音ずつ、5度なし）
+      const pad = [
+        { f: 130.81, t: 0, d: 8 },   // C3
+        { f: 174.61, t: 8, d: 8 },   // F3
       ];
-      padNotes.forEach((n, i) => {
-        const st = t0 + i * 4;
-        osc(ac, 'sine', n.f, st, n.d, 0.12, dest);
-        osc(ac, 'triangle', n.f * 2, st, n.d, 0.06, dest);
-        osc(ac, 'sine', n.f * 1.5, st, n.d, 0.04, dest);  // 5度
+      pad.forEach(n => {
+        note(ac, 'sine', n.f, t0 + n.t, n.d, 0.08, dest);
       });
 
-      // チェレスタ風メロディ（ハリポタ的な神秘的旋律）
+      // チェレスタ風メロディ（Cメジャー系、音数を絞る）
       const melody = [
-        { f: 523.25, t: 0,    d: 0.8 },   // C5
-        { f: 659.25, t: 1,    d: 0.8 },   // E5
-        { f: 783.99, t: 2,    d: 1.2 },   // G5
-        { f: 739.99, t: 3.5,  d: 0.6 },   // F#5
-        { f: 659.25, t: 4.5,  d: 1.5 },   // E5
-        { f: 987.77, t: 6.5,  d: 1.5 },   // B5
-        { f: 880.00, t: 8.5,  d: 2.0 },   // A5
-        { f: 739.99, t: 11,   d: 1.5 },   // F#5
-        { f: 659.25, t: 13,   d: 0.8 },   // E5
-        { f: 523.25, t: 14,   d: 1.8 },   // C5
+        { f: 523.25, t: 0,    d: 1.2 },  // C5
+        { f: 659.25, t: 1.5,  d: 1.2 },  // E5
+        { f: 783.99, t: 3,    d: 2.0 },  // G5
+        { f: 659.25, t: 5.5,  d: 1.5 },  // E5
+        { f: 523.25, t: 7.5,  d: 2.0 },  // C5
+        { f: 440.00, t: 10,   d: 1.5 },  // A4
+        { f: 493.88, t: 12,   d: 1.5 },  // B4
+        { f: 523.25, t: 14,   d: 1.8 },  // C5
       ];
       melody.forEach(n => {
-        const st = t0 + n.t;
-        // チェレスタ = 高いサイン波 + 素早い減衰
-        const o1 = ac.createOscillator();
-        const g1 = ac.createGain();
-        o1.type = 'sine';
-        o1.frequency.value = n.f;
-        g1.gain.setValueAtTime(0, st);
-        g1.gain.linearRampToValueAtTime(0.18, st + 0.02);
-        g1.gain.exponentialRampToValueAtTime(0.01, st + n.d);
-        o1.connect(g1);
-        g1.connect(dest);
-        o1.start(st);
-        o1.stop(st + n.d + 0.1);
-        currentNodes.push(o1);
-        // オクターブ上の倍音
-        const o2 = ac.createOscillator();
-        const g2 = ac.createGain();
-        o2.type = 'sine';
-        o2.frequency.value = n.f * 2;
-        g2.gain.setValueAtTime(0, st);
-        g2.gain.linearRampToValueAtTime(0.06, st + 0.01);
-        g2.gain.exponentialRampToValueAtTime(0.001, st + n.d * 0.6);
-        o2.connect(g2);
-        g2.connect(dest);
-        o2.start(st);
-        o2.stop(st + n.d + 0.1);
-        currentNodes.push(o2);
+        pluck(ac, n.f, t0 + n.t, n.d, 0.15, dest);
       });
 
-      // ハープ風アルペジオ
-      const harp = [261.63, 329.63, 392.00, 523.25, 659.25, 523.25, 392.00, 329.63];
+      // ハープアルペジオ（後半、Cメジャーのみ）
+      const harp = [261.63, 329.63, 392.00, 523.25];
       harp.forEach((f, i) => {
-        const st = t0 + 8 + i * 0.4;
-        const oh = ac.createOscillator();
-        const gh = ac.createGain();
-        oh.type = 'triangle';
-        oh.frequency.value = f;
-        gh.gain.setValueAtTime(0, st);
-        gh.gain.linearRampToValueAtTime(0.1, st + 0.01);
-        gh.gain.exponentialRampToValueAtTime(0.001, st + 1.2);
-        oh.connect(gh);
-        gh.connect(dest);
-        oh.start(st);
-        oh.stop(st + 1.5);
-        currentNodes.push(oh);
+        pluck(ac, f, t0 + 10 + i * 0.5, 1.5, 0.08, dest);
       });
 
-      setTimeout(() => scheduleLoop(), (loopDur - 1) * 1000);
+      const nextStart = t0 + loopDur;
+      const delay = (nextStart - ac.currentTime - 0.5) * 1000;
+      setTimeout(() => scheduleLoop(nextStart), Math.max(0, delay));
     }
     scheduleLoop();
   }
 
-  // === 育成画面BGM：温かく穏やかな魔法の日常 ===
+  // === 育成画面BGM：温かく穏やかなメロディ ===
   function playRaise() {
     if (currentTrack === 'raise') return;
     stopAll();
     currentTrack = 'raise';
     const ac = getCtx();
-    const rev = createReverb(ac);
-    rev.connect(masterGain);
-    const dry = ac.createGain();
-    dry.gain.value = 0.7;
-    dry.connect(masterGain);
-    const wet = ac.createGain();
-    wet.gain.value = 0.3;
-    wet.connect(rev);
-    const dest = ac.createGain();
-    dest.connect(dry);
-    dest.connect(wet);
+    const dest = makeBus(ac, 0.7, 0.25);
 
     const loopDur = 16;
-    function scheduleLoop() {
+    function scheduleLoop(startAt) {
       if (currentTrack !== 'raise') return;
-      const t0 = ac.currentTime + 0.05;
+      const t0 = startAt || (ac.currentTime + 0.05);
 
-      // 温かいパッド
-      const chords = [
-        [261.63, 329.63, 392.00],    // C
-        [293.66, 369.99, 440.00],    // Dm
-        [349.23, 440.00, 523.25],    // F
-        [392.00, 493.88, 587.33],    // G
+      // ベースノート（ルート音のみ、シンプル）
+      const bass = [
+        { f: 130.81, t: 0,  d: 4 },   // C3
+        { f: 146.83, t: 4,  d: 4 },   // D3
+        { f: 174.61, t: 8,  d: 4 },   // F3
+        { f: 130.81, t: 12, d: 4 },   // C3
       ];
-      chords.forEach((chord, ci) => {
-        const st = t0 + ci * 4;
-        chord.forEach(f => {
-          osc(ac, 'sine', f, st, 4.5, 0.07, dest);
-          osc(ac, 'triangle', f * 0.5, st, 4.5, 0.03, dest);
-        });
+      bass.forEach(n => {
+        note(ac, 'sine', n.f, t0 + n.t, n.d, 0.07, dest);
       });
 
-      // 優しいメロディ（木管風）
+      // 優しいメロディ（三角波、音数控えめ）
       const mel = [
-        { f: 523.25, t: 0,   d: 1.0 },   // C5
-        { f: 587.33, t: 1.2, d: 0.8 },   // D5
-        { f: 659.25, t: 2.2, d: 1.5 },   // E5
-        { f: 587.33, t: 4,   d: 0.8 },   // D5
-        { f: 523.25, t: 5,   d: 1.2 },   // C5
-        { f: 440.00, t: 6.5, d: 1.5 },   // A4
-        { f: 493.88, t: 8.5, d: 1.0 },   // B4
-        { f: 523.25, t: 10,  d: 2.0 },   // C5
-        { f: 440.00, t: 12.5,d: 1.0 },   // A4
-        { f: 392.00, t: 14,  d: 1.8 },   // G4
+        { f: 523.25, t: 0,   d: 1.2 },  // C5
+        { f: 587.33, t: 1.5, d: 1.0 },  // D5
+        { f: 659.25, t: 3,   d: 2.0 },  // E5
+        { f: 523.25, t: 5.5, d: 1.5 },  // C5
+        { f: 440.00, t: 8,   d: 1.5 },  // A4
+        { f: 493.88, t: 10,  d: 1.2 },  // B4
+        { f: 523.25, t: 12,  d: 2.0 },  // C5
+        { f: 392.00, t: 14.5,d: 1.3 },  // G4
       ];
       mel.forEach(n => {
         const st = t0 + n.t;
-        // 三角波 = ふんわりした木管のような音色
         const o1 = ac.createOscillator();
         const g1 = ac.createGain();
         o1.type = 'triangle';
         o1.frequency.value = n.f;
         g1.gain.setValueAtTime(0, st);
-        g1.gain.linearRampToValueAtTime(0.13, st + 0.06);
-        g1.gain.setValueAtTime(0.13, st + n.d * 0.7);
+        g1.gain.linearRampToValueAtTime(0.1, st + 0.05);
+        g1.gain.setValueAtTime(0.1, st + n.d * 0.7);
         g1.gain.linearRampToValueAtTime(0, st + n.d);
         o1.connect(g1);
         g1.connect(dest);
@@ -304,142 +265,278 @@ const BGM = (() => {
         currentNodes.push(o1);
       });
 
-      // ピチカート風リズム
-      const pizz = [0, 2, 4, 6, 8, 10, 12, 14];
-      pizz.forEach(beat => {
-        const st = t0 + beat;
-        const f = [130.81, 146.83, 174.61, 196.00][Math.floor(beat / 4) % 4];
-        const op = ac.createOscillator();
-        const gp = ac.createGain();
-        op.type = 'triangle';
-        op.frequency.value = f;
-        gp.gain.setValueAtTime(0, st);
-        gp.gain.linearRampToValueAtTime(0.1, st + 0.01);
-        gp.gain.exponentialRampToValueAtTime(0.001, st + 0.4);
-        op.connect(gp);
-        gp.connect(dest);
-        op.start(st);
-        op.stop(st + 0.5);
-        currentNodes.push(op);
+      // ピチカート（拍頭のみ、4拍に1回）
+      const pizzBass = [130.81, 146.83, 174.61, 130.81];
+      pizzBass.forEach((f, i) => {
+        pluck(ac, f * 2, t0 + i * 4, 0.5, 0.07, dest);
       });
 
-      setTimeout(() => scheduleLoop(), (loopDur - 1) * 1000);
+      const nextStart = t0 + loopDur;
+      const delay = (nextStart - ac.currentTime - 0.5) * 1000;
+      setTimeout(() => scheduleLoop(nextStart), Math.max(0, delay));
     }
     scheduleLoop();
   }
 
-  // === バトル画面BGM: 壮大で緊迫したオーケストラ ===
+  // === バトル画面BGM: 疾走感のある熱いバトル曲 ===
   function playBattle() {
     if (currentTrack === 'battle') return;
     stopAll();
     currentTrack = 'battle';
     const ac = getCtx();
-    const rev = createReverb(ac);
-    rev.connect(masterGain);
-    const dry = ac.createGain();
-    dry.gain.value = 0.8;
-    dry.connect(masterGain);
-    const wet = ac.createGain();
-    wet.gain.value = 0.3;
-    wet.connect(rev);
-    const dest = ac.createGain();
-    dest.connect(dry);
-    dest.connect(wet);
+    const dest = makeBus(ac, 0.75, 0.2);
 
-    const loopDur = 8;
-    function scheduleLoop() {
+    // ローパスフィルター（ブラス・メロディ用）
+    const lpf = ac.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.value = 2200;
+    lpf.connect(dest);
+
+    // ハイパスフィルター（パーカッション用）
+    const hpf = ac.createBiquadFilter();
+    hpf.type = 'highpass';
+    hpf.frequency.value = 800;
+    hpf.connect(dest);
+
+    const B = 0.4;            // 1拍 = 0.4秒 → BPM150
+    const loopDur = B * 64;  // 64拍 = 25.6秒
+
+    function scheduleLoop(startAt) {
       if (currentTrack !== 'battle') return;
-      const t0 = ac.currentTime + 0.05;
+      const t0 = startAt || (ac.currentTime + 0.05);
 
-      // 力強い低音ストリングス
-      const bassLine = [
-        { f: 130.81, t: 0,   d: 1.0 },   // C3
-        { f: 130.81, t: 1,   d: 0.5 },
-        { f: 155.56, t: 1.5, d: 0.5 },   // Eb3
-        { f: 130.81, t: 2,   d: 1.0 },   // C3
-        { f: 174.61, t: 3,   d: 1.0 },   // F3
-        { f: 155.56, t: 4,   d: 1.5 },   // Eb3
-        { f: 130.81, t: 5.5, d: 0.5 },   // C3
-        { f: 116.54, t: 6,   d: 2.0 },   // Bb2
+      // === ドライビングベース（8分音符でオクターブパンプ）===
+      const bassNotes = [
+        // --- セクションA (0-15): Dm→Bb→C→A/Dm ---
+        { f: 73.42, t: 0 }, { f: 146.83, t: 1 }, { f: 73.42, t: 2 }, { f: 146.83, t: 3 },
+        { f: 58.27, t: 4 }, { f: 116.54, t: 5 }, { f: 58.27, t: 6 }, { f: 116.54, t: 7 },
+        { f: 65.41, t: 8 }, { f: 130.81, t: 9 }, { f: 65.41, t: 10 }, { f: 130.81, t: 11 },
+        { f: 55.00, t: 12 }, { f: 110.00, t: 13 }, { f: 73.42, t: 14 }, { f: 146.83, t: 15 },
+        // --- セクションB (16-31): Gm→Eb→F→Dm (転調感) ---
+        { f: 97.99, t: 16 }, { f: 195.99, t: 17 }, { f: 97.99, t: 18 }, { f: 195.99, t: 19 },
+        { f: 77.78, t: 20 }, { f: 155.56, t: 21 }, { f: 77.78, t: 22 }, { f: 155.56, t: 23 },
+        { f: 87.31, t: 24 }, { f: 174.61, t: 25 }, { f: 87.31, t: 26 }, { f: 174.61, t: 27 },
+        { f: 73.42, t: 28 }, { f: 146.83, t: 29 }, { f: 73.42, t: 30 }, { f: 146.83, t: 31 },
+        // --- セクションC (32-47): Bb→C→Dm→A (ブレイク→ビルド) ---
+        { f: 58.27, t: 32 }, { f: 116.54, t: 33 }, { f: 58.27, t: 34 }, { f: 116.54, t: 35 },
+        { f: 65.41, t: 36 }, { f: 130.81, t: 37 }, { f: 65.41, t: 38 }, { f: 130.81, t: 39 },
+        { f: 73.42, t: 40 }, { f: 146.83, t: 41 }, { f: 73.42, t: 42 }, { f: 146.83, t: 43 },
+        { f: 55.00, t: 44 }, { f: 110.00, t: 45 }, { f: 55.00, t: 46 }, { f: 110.00, t: 47 },
+        // --- セクションD (48-63): Dm→Gm→Bb→C→Dm (クライマックス) ---
+        { f: 73.42, t: 48 }, { f: 146.83, t: 49 }, { f: 73.42, t: 50 }, { f: 146.83, t: 51 },
+        { f: 97.99, t: 52 }, { f: 195.99, t: 53 }, { f: 97.99, t: 54 }, { f: 195.99, t: 55 },
+        { f: 58.27, t: 56 }, { f: 116.54, t: 57 }, { f: 65.41, t: 58 }, { f: 130.81, t: 59 },
+        { f: 73.42, t: 60 }, { f: 146.83, t: 61 }, { f: 73.42, t: 62 }, { f: 146.83, t: 63 },
       ];
-      bassLine.forEach(n => {
-        const st = t0 + n.t;
-        osc(ac, 'sawtooth', n.f, st, n.d, 0.06, dest);
-        osc(ac, 'sine', n.f, st, n.d, 0.1, dest);
+      bassNotes.forEach(n => {
+        note(ac, 'sine', n.f, t0 + n.t * B, B * 0.9, 0.12, dest);
+        note(ac, 'triangle', n.f * 2, t0 + n.t * B, B * 0.5, 0.04, dest);
       });
 
-      // ブラス風和音（力強いファンファーレ）
-      const brassChords = [
-        { notes: [261.63, 311.13, 392.00], t: 0, d: 1.8 },   // Cm
-        { notes: [349.23, 415.30, 523.25], t: 2, d: 1.8 },   // Fm
-        { notes: [311.13, 392.00, 466.16], t: 4, d: 1.8 },   // Eb
-        { notes: [233.08, 311.13, 349.23], t: 6, d: 1.8 },   // Bb
+      // === パワーコード・ブラス ===
+      const chords = [
+        // --- セクションA ---
+        { notes: [293.66, 440.00], t: 0, d: 1.5 },
+        { notes: [293.66, 440.00], t: 3, d: 0.8 },
+        { notes: [233.08, 349.23], t: 4, d: 1.5 },
+        { notes: [233.08, 349.23], t: 7, d: 0.8 },
+        { notes: [261.63, 392.00], t: 8, d: 1.5 },
+        { notes: [261.63, 392.00], t: 11, d: 0.8 },
+        { notes: [220.00, 329.63], t: 12, d: 1.5 },
+        { notes: [293.66, 440.00], t: 14, d: 1.8 },
+        // --- セクションB ---
+        { notes: [196.00, 293.66], t: 16, d: 1.5 },    // Gm: G3+D4
+        { notes: [196.00, 293.66], t: 19, d: 0.8 },
+        { notes: [155.56, 233.08], t: 20, d: 1.5 },    // Eb: Eb3+Bb3
+        { notes: [155.56, 233.08], t: 23, d: 0.8 },
+        { notes: [174.61, 261.63], t: 24, d: 1.5 },    // F: F3+C4
+        { notes: [174.61, 261.63], t: 27, d: 0.8 },
+        { notes: [293.66, 440.00], t: 28, d: 1.5 },    // Dm
+        { notes: [293.66, 440.00], t: 30, d: 1.8 },
+        // --- セクションC (ブレイク: コード控えめ、ロングトーン) ---
+        { notes: [233.08, 349.23], t: 32, d: 3.5 },    // Bb ロング
+        { notes: [261.63, 392.00], t: 36, d: 3.5 },    // C ロング
+        { notes: [293.66, 440.00], t: 40, d: 3.5 },    // Dm ロング
+        { notes: [220.00, 329.63], t: 44, d: 3.5 },    // Am ロング
+        // --- セクションD (クライマックス: 密度高め) ---
+        { notes: [293.66, 440.00], t: 48, d: 1.5 },
+        { notes: [293.66, 440.00], t: 50, d: 0.8 },
+        { notes: [293.66, 440.00], t: 51, d: 0.8 },
+        { notes: [196.00, 293.66], t: 52, d: 1.5 },
+        { notes: [196.00, 293.66], t: 54, d: 0.8 },
+        { notes: [196.00, 293.66], t: 55, d: 0.8 },
+        { notes: [233.08, 349.23], t: 56, d: 0.8 },
+        { notes: [261.63, 392.00], t: 57, d: 0.8 },
+        { notes: [233.08, 349.23], t: 58, d: 0.8 },
+        { notes: [261.63, 392.00], t: 59, d: 0.8 },
+        { notes: [293.66, 440.00], t: 60, d: 3.8 },    // Dm大解決
       ];
-      brassChords.forEach(ch => {
-        const st = t0 + ch.t;
+      chords.forEach(ch => {
         ch.notes.forEach(f => {
-          // のこぎり波 = 金管楽器的な倍音
-          osc(ac, 'sawtooth', f, st, ch.d, 0.04, dest);
-          osc(ac, 'square', f, st, ch.d, 0.02, dest);
+          note(ac, 'sawtooth', f, t0 + ch.t * B, ch.d * B, 0.035, lpf);
         });
       });
 
-      // 戦闘メロディ（ドラマチック）
+      // === メロディ ===
       const mel = [
-        { f: 523.25, t: 0,    d: 0.4 },   // C5
-        { f: 622.25, t: 0.5,  d: 0.4 },   // Eb5
-        { f: 783.99, t: 1.0,  d: 0.8 },   // G5
-        { f: 739.99, t: 2.0,  d: 0.4 },   // F#5→
-        { f: 698.46, t: 2.5,  d: 0.8 },   // F5
-        { f: 622.25, t: 3.5,  d: 0.5 },   // Eb5
-        { f: 523.25, t: 4.0,  d: 1.0 },   // C5
-        { f: 466.16, t: 5.5,  d: 0.5 },   // Bb4
-        { f: 523.25, t: 6.0,  d: 0.5 },   // C5
-        { f: 622.25, t: 6.5,  d: 1.3 },   // Eb5
+        // --- セクションA: 勇壮な主題 ---
+        { f: 587.33, t: 0,    d: 0.8 },    // D5
+        { f: 659.25, t: 1,    d: 0.8 },    // E5
+        { f: 698.46, t: 2,    d: 1.5 },    // F5
+        { f: 880.00, t: 3.5,  d: 0.5 },    // A5
+        { f: 783.99, t: 4,    d: 0.8 },    // G5
+        { f: 698.46, t: 5,    d: 0.8 },    // F5
+        { f: 587.33, t: 6,    d: 1.8 },    // D5
+        { f: 523.25, t: 8,    d: 0.5 },    // C5
+        { f: 587.33, t: 8.5,  d: 0.5 },    // D5
+        { f: 698.46, t: 9,    d: 0.5 },    // F5
+        { f: 880.00, t: 9.5,  d: 1.5 },    // A5
+        { f: 783.99, t: 11,   d: 1.0 },    // G5
+        { f: 698.46, t: 12,   d: 0.8 },    // F5
+        { f: 659.25, t: 13,   d: 0.8 },    // E5
+        { f: 587.33, t: 14,   d: 1.8 },    // D5
+
+        // --- セクションB: 応答フレーズ（高域で展開） ---
+        { f: 783.99, t: 16,   d: 0.8 },    // G5
+        { f: 880.00, t: 17,   d: 0.8 },    // A5
+        { f: 932.33, t: 18,   d: 1.5 },    // Bb5
+        { f: 1046.50, t: 19.5, d: 0.5 },   // C6
+        { f: 932.33, t: 20,   d: 0.8 },    // Bb5
+        { f: 783.99, t: 21,   d: 0.8 },    // G5
+        { f: 698.46, t: 22,   d: 1.8 },    // F5
+        { f: 880.00, t: 24,   d: 0.5 },    // A5
+        { f: 783.99, t: 24.5, d: 0.5 },    // G5
+        { f: 698.46, t: 25,   d: 0.5 },    // F5
+        { f: 587.33, t: 25.5, d: 1.5 },    // D5
+        { f: 659.25, t: 27,   d: 1.0 },    // E5
+        { f: 587.33, t: 28,   d: 0.8 },    // D5
+        { f: 523.25, t: 29,   d: 0.8 },    // C5
+        { f: 587.33, t: 30,   d: 1.8 },    // D5
+
+        // --- セクションC: ブレイク（音数少なめ、溜め） ---
+        { f: 466.16, t: 32,   d: 2.0 },    // Bb4 (低く)
+        { f: 523.25, t: 34,   d: 2.0 },    // C5
+        { f: 587.33, t: 36,   d: 1.0 },    // D5
+        { f: 698.46, t: 37,   d: 3.0 },    // F5 (ロング)
+        { f: 587.33, t: 40,   d: 1.0 },    // D5
+        { f: 659.25, t: 41,   d: 1.0 },    // E5
+        { f: 698.46, t: 42,   d: 1.0 },    // F5
+        { f: 783.99, t: 43,   d: 1.0 },    // G5 (上昇)
+        { f: 880.00, t: 44,   d: 1.0 },    // A5
+        { f: 932.33, t: 45,   d: 1.0 },    // Bb5
+        { f: 1046.50, t: 46,  d: 1.8 },    // C6 (頂点!)
+
+        // --- セクションD: クライマックス（最も激しく） ---
+        { f: 1174.66, t: 48,  d: 0.5 },    // D6
+        { f: 1046.50, t: 48.5, d: 0.5 },   // C6
+        { f: 880.00, t: 49,   d: 0.5 },    // A5
+        { f: 587.33, t: 49.5, d: 0.5 },    // D5
+        { f: 783.99, t: 50,   d: 0.8 },    // G5
+        { f: 880.00, t: 51,   d: 0.8 },    // A5
+        { f: 932.33, t: 52,   d: 0.5 },    // Bb5
+        { f: 1046.50, t: 52.5, d: 0.5 },   // C6
+        { f: 1174.66, t: 53,  d: 1.0 },    // D6
+        { f: 1046.50, t: 54,  d: 0.8 },    // C6
+        { f: 932.33, t: 55,   d: 0.8 },    // Bb5
+        { f: 880.00, t: 56,   d: 0.5 },    // A5
+        { f: 783.99, t: 56.5, d: 0.5 },    // G5
+        { f: 698.46, t: 57,   d: 0.5 },    // F5
+        { f: 659.25, t: 57.5, d: 0.5 },    // E5
+        { f: 587.33, t: 58,   d: 1.0 },    // D5
+        { f: 880.00, t: 59,   d: 1.0 },    // A5 (跳躍)
+        { f: 587.33, t: 60,   d: 3.8 },    // D5 (大解決ロングトーン)
       ];
       mel.forEach(n => {
-        const st = t0 + n.t;
+        const st = t0 + n.t * B;
+        const dur = n.d * B;
         const o1 = ac.createOscillator();
         const g1 = ac.createGain();
         o1.type = 'square';
         o1.frequency.value = n.f;
-        // フィルターで丸みを出す
-        const flt = ac.createBiquadFilter();
-        flt.type = 'lowpass';
-        flt.frequency.value = 2000;
         g1.gain.setValueAtTime(0, st);
-        g1.gain.linearRampToValueAtTime(0.08, st + 0.03);
-        g1.gain.setValueAtTime(0.08, st + n.d * 0.7);
-        g1.gain.linearRampToValueAtTime(0, st + n.d);
-        o1.connect(flt);
-        flt.connect(g1);
-        g1.connect(dest);
+        g1.gain.linearRampToValueAtTime(0.055, st + 0.02);
+        g1.gain.setValueAtTime(0.055, st + dur * 0.6);
+        g1.gain.linearRampToValueAtTime(0, st + dur);
+        o1.connect(g1);
+        g1.connect(lpf);
         o1.start(st);
-        o1.stop(st + n.d + 0.1);
+        o1.stop(st + dur + 0.05);
         currentNodes.push(o1);
       });
 
-      // ティンパニ風リズム
-      const timps = [0, 1, 2, 3, 4, 5, 6, 7];
-      timps.forEach(beat => {
-        const st = t0 + beat;
-        const accent = (beat % 2 === 0) ? 0.15 : 0.08;
+      // === ティンパニ + スネア ===
+      for (let i = 0; i < 64; i++) {
+        const st = t0 + i * B;
+        // セクションCの前半(32-39)はキック控えめ
+        const isBreak = (i >= 32 && i < 40);
+        const kickVol = isBreak ? 0.06 : 0.14;
+
         const ot = ac.createOscillator();
         const gt = ac.createGain();
         ot.type = 'sine';
         ot.frequency.setValueAtTime(80, st);
-        ot.frequency.exponentialRampToValueAtTime(50, st + 0.15);
+        ot.frequency.exponentialRampToValueAtTime(40, st + 0.12);
         gt.gain.setValueAtTime(0, st);
-        gt.gain.linearRampToValueAtTime(accent, st + 0.005);
-        gt.gain.exponentialRampToValueAtTime(0.001, st + 0.35);
+        gt.gain.linearRampToValueAtTime(kickVol, st + 0.004);
+        gt.gain.exponentialRampToValueAtTime(0.001, st + 0.25);
         ot.connect(gt);
         gt.connect(dest);
         ot.start(st);
-        ot.stop(st + 0.4);
+        ot.stop(st + 0.3);
         currentNodes.push(ot);
-      });
 
-      setTimeout(() => scheduleLoop(), (loopDur - 0.5) * 1000);
+        // スネア風（裏拍のみ、ブレイク中は休み）
+        if (i % 2 === 1 && !isBreak) {
+          const bufLen = ac.sampleRate * 0.08;
+          const noiseBuf = ac.createBuffer(1, bufLen, ac.sampleRate);
+          const data = noiseBuf.getChannelData(0);
+          for (let j = 0; j < bufLen; j++) data[j] = Math.random() * 2 - 1;
+          const ns = ac.createBufferSource();
+          ns.buffer = noiseBuf;
+          const ng = ac.createGain();
+          ng.gain.setValueAtTime(0, st);
+          ng.gain.linearRampToValueAtTime(0.1, st + 0.003);
+          ng.gain.exponentialRampToValueAtTime(0.001, st + 0.07);
+          ns.connect(ng);
+          ng.connect(hpf);
+          ns.start(st);
+          ns.stop(st + 0.1);
+          currentNodes.push(ns);
+        }
+      }
+
+      // === ハイハット風（8分音符刻み） ===
+      for (let i = 0; i < 128; i++) {
+        const st = t0 + i * B * 0.5;
+        const beat = Math.floor(i / 2);
+        const isBreak = (beat >= 32 && beat < 40);
+        // ブレイク中はハイハット音量下げ
+        const baseVol = isBreak ? 0.015 : ((i % 2 === 0) ? 0.04 : 0.025);
+        // セクションD(48-)で4分音符の頭にアクセント
+        const isClimax = (beat >= 48);
+        const vol = (isClimax && i % 4 === 0) ? 0.05 : baseVol;
+
+        const bufLen = ac.sampleRate * 0.03;
+        const hhBuf = ac.createBuffer(1, bufLen, ac.sampleRate);
+        const hhData = hhBuf.getChannelData(0);
+        for (let j = 0; j < bufLen; j++) hhData[j] = Math.random() * 2 - 1;
+        const hh = ac.createBufferSource();
+        hh.buffer = hhBuf;
+        const hhg = ac.createGain();
+        hhg.gain.setValueAtTime(0, st);
+        hhg.gain.linearRampToValueAtTime(vol, st + 0.002);
+        hhg.gain.exponentialRampToValueAtTime(0.001, st + 0.025);
+        hh.connect(hhg);
+        hhg.connect(hpf);
+        hh.start(st);
+        hh.stop(st + 0.04);
+        currentNodes.push(hh);
+      }
+
+      // 次のループを正確なタイミングでスケジュール
+      const nextStart = t0 + loopDur;
+      const delay = (nextStart - ac.currentTime - 0.3) * 1000;
+      setTimeout(() => scheduleLoop(nextStart), Math.max(0, delay));
     }
     scheduleLoop();
   }
