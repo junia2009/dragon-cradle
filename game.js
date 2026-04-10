@@ -1827,8 +1827,8 @@ function initBattleScene(attr) {
   battleScene.fog = new THREE.FogExp2(battleBg, 0.018);
 
   battleCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
-  battleCamera.position.set(0, 2, 12);
-  battleCamera.lookAt(0, 0, 0);
+  battleCamera.position.set(0, 1.5, 8);
+  battleCamera.lookAt(0, 0.5, 0);
 
   battleRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   battleRenderer.setSize(W, H);
@@ -1858,16 +1858,16 @@ function initBattleScene(attr) {
 
   // プレイヤードラゴン（左）
   playerDragonGroup = state.stage === 'adult' ? buildAdultDragon(attr) : buildBabyDragon(attr);
-  playerDragonGroup.position.set(-4, 0, 0);
+  playerDragonGroup.position.set(-3, 0, 0);
   playerDragonGroup.rotation.y = 0.6;
-  playerDragonGroup.scale.setScalar(0.7);
+  playerDragonGroup.scale.setScalar(1.1);
   battleScene.add(playerDragonGroup);
 
   // 敵ドラゴン（右）
   enemyDragonGroup = buildAdultDragon(enemyAttr);
-  enemyDragonGroup.position.set(4, 0, 0);
+  enemyDragonGroup.position.set(3, 0, 0);
   enemyDragonGroup.rotation.y = -0.6;  // 左向き（プレイヤー方向）
-  enemyDragonGroup.scale.setScalar(0.7);
+  enemyDragonGroup.scale.setScalar(1.1);
   battleScene.add(enemyDragonGroup);
 
   // バトル初期化
