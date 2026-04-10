@@ -138,6 +138,17 @@ function makeCone(r, h, color, emissiveHex, emissiveInt = 0.3, seg = 10) {
 function makeTorus(r, tube, color, emissiveHex, emissiveInt = 0.3) {
   return new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, 16), _makeMat(color, emissiveHex, emissiveInt));
 }
+// コウモリ翼型のポリゴンメッシュを生成（ptsは2D座標配列、XY平面）
+function makeWingShape(pts, color, emissiveHex, emissiveInt = 0.3) {
+  const shape = new THREE.Shape();
+  shape.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
+  shape.closePath();
+  const geo = new THREE.ShapeGeometry(shape);
+  const mat = _makeMat(color, emissiveHex, emissiveInt);
+  mat.side = THREE.DoubleSide;
+  return new THREE.Mesh(geo, mat);
+}
 
 // 共通: 星空パーティクル
 function createStarField(scene, count = 400) {
@@ -850,21 +861,27 @@ function buildAdultDragon(attr) {
   hip.position.set(0, -0.06, -0.45);
   g.add(hip);
 
-  // 首（体に合わせた二重構造）
-  const neckBase = makeCylinder(s.nR, s.nR*0.8, s.nH*0.5, bodyColor, em, 0.2);
-  neckBase.position.set(0, 0.4, 0.5);
-  neckBase.rotation.x = -0.25;
+  // 首（太く力強い二重構造）
+  const neckBase = makeCylinder(s.nR*1.3, s.nR*1.1, s.nH*0.45, bodyColor, em, 0.2);
+  neckBase.position.set(0, 0.35, 0.55);
+  neckBase.rotation.x = -0.2;
   g.add(neckBase);
-  const neckUpper = makeCylinder(s.nR*0.75, s.nR*0.6, s.nH*0.55, bodyColor, em, 0.2);
-  neckUpper.position.set(0, 0.85, 0.7);
-  neckUpper.rotation.x = -0.35;
+  const neckUpper = makeCylinder(s.nR*1.05, s.nR*0.85, s.nH*0.45, bodyColor, em, 0.2);
+  neckUpper.position.set(0, 0.75, 0.72);
+  neckUpper.rotation.x = -0.3;
   g.add(neckUpper);
+  // 首の筋肉（前後左右で太く見せる）
   [[-1, 0], [1, 0]].forEach(([side]) => {
-    const neckMuscle = makeEllipsoid(0.05, 0.22, 0.07, bc2, em, 0.12);
-    neckMuscle.position.set(side*0.12, 0.6, 0.6);
-    neckMuscle.rotation.x = -0.3;
+    const neckMuscle = makeEllipsoid(0.08, 0.25, 0.12, bc2, em, 0.12);
+    neckMuscle.position.set(side*0.1, 0.55, 0.62);
+    neckMuscle.rotation.x = -0.25;
     g.add(neckMuscle);
   });
+  // 喉（前面の膨らみ）
+  const throat = makeEllipsoid(0.1, 0.2, 0.15, bc2, em, 0.1);
+  throat.position.set(0, 0.5, 0.75);
+  throat.rotation.x = -0.2;
+  g.add(throat);
 
   // 頭（小さく前方に尖った形状）
   const head = makeEllipsoid(s.hRx, s.hRy, s.hRz, bodyColor, em, 0.2);
@@ -965,7 +982,7 @@ function buildAdultDragon(attr) {
       sideHorn.rotation.z = x<0 ? -0.5 : 0.5;
       g.add(sideHorn);
     });
-    // ---- 翼（骨2本 + 大きな膜面） ----
+    // ---- 翼（骨2本 + コウモリ翼膜） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
       const wingJoint = makeSphere(0.09, c, em, 0.4);
       wingJoint.position.set(side*0.55, 0.4, -0.1);
@@ -982,15 +999,22 @@ function buildAdultDragon(attr) {
       const wingElbow = makeSphere(0.045, c, em, 0.6);
       wingElbow.position.set(side*1.6, 1.15, -0.22);
       g.add(wingElbow);
-      // 翼膜（横に長い翼パネル × 3段）
-      for (let j = 0; j < 3; j++) {
-        const memW = 0.9 - j*0.2;
-        const memH = 0.2 - j*0.04;
-        const mem = makeEllipsoid(memW, memH, 0.015, j<2 ? c : '#FF8C00', em, 0.2+j*0.1);
-        mem.position.set(side*(1.1+j*0.4), 0.5+j*0.15, -0.15-j*0.04);
-        mem.rotation.z = side*(0.4+j*0.15);
-        g.add(mem);
-      }
+      // 翼膜（コウモリ翼ポリゴン）
+      const wm = makeWingShape([
+        [0.55, 0.35],   // 肩ジョイント
+        [1.6, 1.15],    // 肘
+        [2.5, 1.8],     // 翼先端
+        [2.3, 0.7],     // 先端下
+        [1.8, 0.15],    // 外側下（スカラップ谷）
+        [2.0, 0.5],     // スカラップ山
+        [1.3, -0.05],   // 中間下（スカラップ谷）
+        [1.5, 0.3],     // スカラップ山
+        [0.8, -0.15],   // 内側下（スカラップ谷）
+        [0.55, 0.0],    // 体際の下端
+      ], c, em, 0.25);
+      wm.position.z = -0.15;
+      if (side < 0) wm.scale.x = -1;
+      g.add(wm);
       // 翼先端の炎
       const wingFlame = makeSphere(0.09, '#FF8C00', em, 1.0);
       wingFlame.position.set(side*2.6, 1.9, -0.4);
@@ -1074,7 +1098,7 @@ function buildAdultDragon(attr) {
       gem.position.set(-0.1+i*0.05, 1.55+h*0.3, 1.0);
       g.add(gem);
     }
-    // ---- 翼（骨2本 + 大きな氷膜面） ----
+    // ---- 翼（骨2本 + コウモリ翼膜） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
       const wingJoint = makeSphere(0.07, c, em, 0.35);
       wingJoint.position.set(side*0.55, 0.4, -0.08);
@@ -1090,15 +1114,22 @@ function buildAdultDragon(attr) {
       const wingElbow = makeSphere(0.04, '#ffffff', '#aaddff', 0.6);
       wingElbow.position.set(side*1.45, 1.1, -0.2);
       g.add(wingElbow);
-      // 翼膜（横に長い翼パネル）
-      for (let j = 0; j < 3; j++) {
-        const memW = 0.85 - j*0.18;
-        const memH = 0.18 - j*0.03;
-        const mem = makeEllipsoid(memW, memH, 0.012, '#ffffff', '#aaddff', 0.2+j*0.12);
-        mem.position.set(side*(1.0+j*0.35), 0.45+j*0.15, -0.08-j*0.04);
-        mem.rotation.z = side*(0.4+j*0.15);
-        g.add(mem);
-      }
+      // 翼膜（コウモリ翼ポリゴン）
+      const wm = makeWingShape([
+        [0.5, 0.3],
+        [1.45, 1.1],
+        [2.3, 1.65],
+        [2.1, 0.6],
+        [1.6, 0.1],
+        [1.8, 0.4],
+        [1.1, -0.1],
+        [1.3, 0.2],
+        [0.7, -0.15],
+        [0.5, -0.05],
+      ], '#ffffff', '#aaddff', 0.25);
+      wm.position.z = -0.1;
+      if (side < 0) wm.scale.x = -1;
+      g.add(wm);
       for (let k = 0; k < 3; k++) {
         const crystal = makeCone(0.025, 0.1+k*0.03, '#ffffff', '#aaddff', 1.0+k*0.1);
         crystal.position.set(side*(2.3+k*0.06), 1.65+k*0.06, -0.35);
@@ -1184,7 +1215,7 @@ function buildAdultDragon(attr) {
       neckBolt.rotation.z = (i%2-0.5)*0.8;
       g.add(neckBolt);
     }
-    // ---- 翼（骨2本 + 大きな膜面 + 稲妻ライン） ----
+    // ---- 翼（骨2本 + コウモリ翼膜 + 稲妻ライン） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
       const wingJoint = makeSphere(0.06, c, em, 0.5);
       wingJoint.position.set(side*0.48, 0.35, -0.1);
@@ -1201,15 +1232,22 @@ function buildAdultDragon(attr) {
       const wingElbow = makeSphere(0.035, c, em, 0.6);
       wingElbow.position.set(side*1.55, 1.0, -0.25);
       g.add(wingElbow);
-      // 翼膜（横に長い翼パネル）
-      for (let j = 0; j < 3; j++) {
-        const memW = 0.9 - j*0.2;
-        const memH = 0.18 - j*0.03;
-        const mem = makeEllipsoid(memW, memH, 0.012, c, em, 0.2+j*0.15);
-        mem.position.set(side*(1.0+j*0.4), 0.4+j*0.12, -0.12-j*0.05);
-        mem.rotation.z = side*(0.4+j*0.18);
-        g.add(mem);
-      }
+      // 翼膜（ギザギザ翼ポリゴン — 雷らしい鋭角）
+      const wm = makeWingShape([
+        [0.48, 0.3],
+        [1.55, 1.0],
+        [2.65, 1.7],
+        [2.4, 0.65],
+        [1.9, 0.05],
+        [2.15, 0.45],
+        [1.4, -0.1],
+        [1.6, 0.2],
+        [0.9, -0.2],
+        [0.48, -0.05],
+      ], c, em, 0.3);
+      wm.position.z = -0.15;
+      if (side < 0) wm.scale.x = -1;
+      g.add(wm);
       for (let j = 0; j < 2; j++) {
         const bolt = makeCylinder(0.01, 0.01, 0.4+j*0.08, '#ffffff', c, 1.0);
         bolt.position.set(side*(1.2+j*0.4), 0.55-j*0.12, -0.2-j*0.08);
@@ -1309,7 +1347,7 @@ function buildAdultDragon(attr) {
       neckRune.position.set(0.1*(i%2===0?1:-1), 0.55+i*0.12, 0.48+i*0.03);
       g.add(neckRune);
     }
-    // ---- 翼（骨3本 + 暗膜5枚 + 闇のエッジ） ----
+    // ---- 翼（骨3本 + コウモリ翼膜 + 闇のエッジ） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
       const wingJoint = makeSphere(0.07, c, em, 0.3);
       wingJoint.position.set(side*0.58, 0.35, -0.08);
@@ -1326,13 +1364,23 @@ function buildAdultDragon(attr) {
       wingBone3.position.set(side*2.8, 1.85, -0.48);
       wingBone3.rotation.z = side*1.1;
       g.add(wingBone3);
-      for (let j = 0; j < 5; j++) {
-        const memW = 0.7-j*0.1, memH = 0.18-j*0.025;
-        const mem = makeEllipsoid(memW, memH, 0.012, bodyColor, em, 0.02+j*0.015);
-        mem.position.set(side*(1.2+j*0.35), 0.45+j*0.12, -0.12-j*0.06);
-        mem.rotation.z = side*(0.42+j*0.15);
-        g.add(mem);
-      }
+      // 翼膜（コウモリ翼ポリゴン — 闇は大きく広い）
+      const wm = makeWingShape([
+        [0.55, 0.25],
+        [1.65, 1.15],
+        [2.8, 1.85],
+        [2.6, 0.8],
+        [2.1, 0.1],
+        [2.3, 0.55],
+        [1.6, -0.1],
+        [1.8, 0.3],
+        [1.0, -0.2],
+        [1.2, 0.1],
+        [0.55, -0.1],
+      ], bodyColor, em, 0.05);
+      wm.position.z = -0.12;
+      if (side < 0) wm.scale.x = -1;
+      g.add(wm);
       // 翼のエッジグロー
       for (let k = 0; k < 4; k++) {
         const edgeGlow = makeSphere(0.02, c, em, 0.8+k*0.1);
