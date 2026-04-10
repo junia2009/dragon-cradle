@@ -531,8 +531,10 @@ html, body {
 .battle-log {
   position: absolute;
   bottom: calc(3.8rem + max(0.3rem, env(safe-area-inset-bottom, 0px)));
-  right: 1rem;
-  width: 170px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  max-width: 60%;
   max-height: 200px;
   overflow-y: auto;
   background: rgba(7,11,20,0.75);
