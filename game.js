@@ -463,6 +463,8 @@ let raiseIdleTimer = null;
 let staCountdownTimer = null;
 let staNextRecovery = 0; // 次回スタミナ回復の予定時刻(ms)
 let raiseResizeHandler = null; // resizeリスナ輴笯管理用
+let dragonRotY = 0;       // ユーザー操作によるY回転
+let _dragState = null;     // ドラッグ状態
 
 function initRaiseScene(attr) {
   const canvas = document.getElementById('raise-canvas');
@@ -550,6 +552,31 @@ function initRaiseScene(attr) {
     });
   };
   window.addEventListener('resize', raiseResizeHandler);
+
+  // ドラッグ/スワイプでドラゴン回転
+  dragonRotY = 0;
+  _dragState = null;
+  const onPointerDown = (e) => {
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    _dragState = { startX: x, startRot: dragonRotY };
+  };
+  const onPointerMove = (e) => {
+    if (!_dragState) return;
+    if (e.touches) e.preventDefault();
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    const dx = x - _dragState.startX;
+    dragonRotY = _dragState.startRot + dx * 0.01;
+  };
+  const onPointerUp = () => { _dragState = null; };
+  canvas.addEventListener('mousedown', onPointerDown);
+  canvas.addEventListener('mousemove', onPointerMove);
+  canvas.addEventListener('mouseup', onPointerUp);
+  canvas.addEventListener('mouseleave', onPointerUp);
+  canvas.addEventListener('touchstart', onPointerDown, { passive: true });
+  canvas.addEventListener('touchmove', onPointerMove, { passive: false });
+  canvas.addEventListener('touchend', onPointerUp);
+  canvas.addEventListener('touchcancel', onPointerUp);
+
   }); // requestAnimationFrame end
 }
 
@@ -1368,9 +1395,9 @@ function animateRaise() {
   const t = performance.now() * 0.001;
 
   if (dragonGroup) {
-    // ゆっくり浮遊（回転なし、正面向き固定）
+    // ゆっくり浮遊 + ユーザー操作による回転
     dragonGroup.position.y = Math.sin(t * 0.8) * 0.12;
-    dragonGroup.rotation.y = 0;
+    dragonGroup.rotation.y = dragonRotY;
   }
 
   // 属性エフェクトパーティクル
