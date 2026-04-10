@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Dragon Model Preview</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden; }
+#pv-controls {
+  position: fixed; top: 10px; left: 10px; z-index: 100;
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+}
+#pv-controls button, #pv-controls select {
+  padding: 6px 14px; border: 1px solid #555; border-radius: 4px;
+  background: #222; color: #fff; cursor: pointer; font-size: 14px;
+}
+#pv-controls button:hover { background: #444; }
+#pv-controls button.active { background: #666; border-color: #aaa; }
+#pv-controls label { font-size: 13px; color: #aaa; }
+#game-stubs, #game-stubs * { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ====== game.js が参照するダミーDOM要素 ====== -->
+<div id="game-stubs">
+  <div id="screen-select" class="screen"></div>
+  <div id="screen-hatch" class="screen"></div>
+  <div id="screen-raise" class="screen"></div>
+  <div id="screen-battle" class="screen"></div>
+  <div id="screen-record" class="screen"></div>
+  <div id="main-nav" class="hidden"></div>
+  <div id="orientation-overlay" class="hidden"></div>
+  <!-- 属性選択カード -->
+  <button class="attr-card" data-attr="fire"></button>
+  <button class="attr-card" data-attr="ice"></button>
+  <button class="attr-card" data-attr="thunder"></button>
+  <button class="attr-card" data-attr="dark"></button>
+  <!-- キャンバス -->
+  <canvas id="hatch-canvas" width="1" height="1"></canvas>
+  <canvas id="raise-canvas" width="1" height="1"></canvas>
+  <canvas id="battle-canvas" width="1" height="1"></canvas>
+  <!-- 孵化UI -->
+  <div id="hatch-attr-label"></div>
+  <div id="hatch-tap-result"></div>
+  <div id="hatch-gauge-fill"></div>
+  <div id="hatch-gauge-text"></div>
+  <div id="hatch-timing-bar"></div>
+  <!-- 育成UI -->
+  <div id="raise-attr-label"></div>
+  <div id="raise-stage-label"></div>
+  <div id="raise-gauge-fill"></div>
+  <div id="raise-stage-progress"></div>
+  <div id="stamina-dots"></div>
+  <div id="sta-recover-time"></div>
+  <div id="dragon-type-label"></div>
+  <div id="action-feedback"></div>
+  <div id="stat-hp-bar"></div><div id="stat-hp-val"></div>
+  <div id="stat-atk-bar"></div><div id="stat-atk-val"></div>
+  <div id="stat-def-bar"></div><div id="stat-def-val"></div>
+  <div id="stat-spd-bar"></div><div id="stat-spd-val"></div>
+  <button id="btn-feed"></button>
+  <button id="btn-train-atk"></button>
+  <button id="btn-train-def"></button>
+  <button id="btn-train-spd"></button>
+  <button id="btn-go-battle"></button>
+  <!-- バトルUI -->
+  <div id="battle-result" class="hidden"></div>
+  <div id="battle-result-title"></div>
+  <div id="battle-result-score"></div>
+  <div id="battle-commands" class="hidden"></div>
+  <div id="enemy-intent"></div>
+  <button id="cmd-attack"></button>
+  <button id="cmd-special"></button>
+  <button id="cmd-guard"></button>
+  <div id="mp-cost-label"></div>
+  <div id="battle-player-name"></div>
+  <div id="battle-enemy-name"></div>
+  <div id="battle-player-hp-bar"></div>
+  <div id="battle-enemy-hp-bar"></div>
+  <div id="battle-player-hp-text"></div>
+  <div id="battle-enemy-hp-text"></div>
+  <div id="mp-bar"></div>
+  <div id="mp-text"></div>
+  <div id="battle-log"></div>
+  <button id="btn-next-battle"></button>
+  <button id="btn-back-raise"></button>
+  <!-- ナビ・レコード -->
+  <button id="nav-raise" class="nav-btn" data-screen="raise"></button>
+  <button id="nav-battle" class="nav-btn" data-screen="battle"></button>
+  <button id="nav-record" class="nav-btn" data-screen="record"></button>
+  <button id="btn-back-from-record"></button>
+  <!-- レコード表示 -->
+  <div id="rec-best-score"></div>
+  <div id="rec-best-streak"></div>
+  <div id="rec-total-win"></div>
+</div>
+
+<!-- ====== プレビュー用UI ====== -->
+<div id="pv-controls">
+  <label>属性:</label>
+  <button data-pv-attr="fire" class="active">🔥 炎</button>
+  <button data-pv-attr="ice">❄️ 氷</button>
+  <button data-pv-attr="thunder">⚡ 雷</button>
+  <button data-pv-attr="dark">🌑 闇</button>
+  <span style="width:20px"></span>
+  <label>段階:</label>
+  <button data-pv-stage="baby">幼体</button>
+  <button data-pv-stage="adult" class="active">成体</button>
+  <span style="width:20px"></span>
+  <label>タイプ:</label>
+  <select id="pv-type-select">
+    <option value="balanced">バランス</option>
+    <option value="attacker">アタッカー</option>
+    <option value="tank">タンク</option>
+    <option value="speedster">スピード</option>
+  </select>
+  <span style="width:20px"></span>
+  <button id="pv-btn-wireframe">ワイヤーフレーム</button>
+  <button id="pv-btn-reset-cam">カメラリセット</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<!-- localStorage をスタブ化（セーブ読み込み無効化） -->
+<script>
+(function() {
+  const _getItem = localStorage.getItem.bind(localStorage);
+  Storage.prototype.getItem = function(k) {
+    if (k === 'dragon_cradle_save' || k === 'dragon_cradle_save_best') return null;
+    return _getItem(k);
+  };
+  const _setItem = localStorage.setItem.bind(localStorage);
+  Storage.prototype.setItem = function(k, v) {
+    if (k === 'dragon_cradle_save' || k === 'dragon_cradle_save_best') return;
+    return _setItem(k, v);
+  };
+})();
+</script>
+
+<!-- game.js をそのまま読み込む（ダミーDOMが全IDを吸収） -->
+<script src="game.js"></script>
+
+<!-- プレビュー本体 -->
+<script>
+(function() {
+  const pvRenderer = new THREE.WebGLRenderer({ antialias: true });
+  pvRenderer.setSize(window.innerWidth, window.innerHeight);
+  pvRenderer.setPixelRatio(window.devicePixelRatio);
+  pvRenderer.outputEncoding = THREE.sRGBEncoding;
+  document.body.appendChild(pvRenderer.domElement);
+
+  const pvScene = new THREE.Scene();
+  pvScene.background = new THREE.Color(0x1a1a2e);
+
+  const pvCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
+  pvCamera.position.set(0, 2, 8);
+
+  const pvControls = new THREE.OrbitControls(pvCamera, pvRenderer.domElement);
+  pvControls.target.set(0, 0.5, 0);
+  pvControls.enableDamping = true;
+  pvControls.dampingFactor = 0.08;
+
+  // ライト
+  pvScene.add(new THREE.AmbientLight(0x404060, 0.6));
+  const d1 = new THREE.DirectionalLight(0xffffff, 0.8);
+  d1.position.set(5, 10, 7);
+  pvScene.add(d1);
+  const d2 = new THREE.DirectionalLight(0x6688cc, 0.3);
+  d2.position.set(-3, 5, -5);
+  pvScene.add(d2);
+
+  // グリッド
+  const grid = new THREE.GridHelper(10, 20, 0x333355, 0x222244);
+  grid.position.y = -1;
+  pvScene.add(grid);
+
+  let currentModel = null;
+  let pvAttr = 'fire';
+  let pvStage = 'adult';
+  let wireframeMode = false;
+
+  function loadModel() {
+    if (currentModel) { pvScene.remove(currentModel); currentModel = null; }
+    attrEffectParticles = [];
+    state.dragonType = document.getElementById('pv-type-select').value;
+    try {
+      currentModel = (pvStage === 'adult')
+        ? buildAdultDragon(pvAttr)
+        : buildBabyDragon(pvAttr);
+      if (wireframeMode) {
+        currentModel.traverse(c => { if (c.isMesh && c.material) c.material.wireframe = true; });
+      }
+      pvScene.add(currentModel);
+    } catch(e) {
+      console.error('Model build error:', e);
+    }
+  }
+
+  // 属性ボタン
+  document.querySelectorAll('[data-pv-attr]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-pv-attr]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      pvAttr = btn.dataset.pvAttr;
+      loadModel();
+    });
+  });
+
+  // 段階ボタン
+  document.querySelectorAll('[data-pv-stage]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('[data-pv-stage]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      pvStage = btn.dataset.pvStage;
+      loadModel();
+    });
+  });
+
+  // タイプ選択
+  document.getElementById('pv-type-select').addEventListener('change', () => loadModel());
+
+  // ワイヤーフレーム
+  document.getElementById('pv-btn-wireframe').addEventListener('click', function() {
+    wireframeMode = !wireframeMode;
+    this.classList.toggle('active', wireframeMode);
+    if (currentModel) {
+      currentModel.traverse(c => { if (c.isMesh && c.material) c.material.wireframe = wireframeMode; });
+    }
+  });
+
+  // カメラリセット
+  document.getElementById('pv-btn-reset-cam').addEventListener('click', () => {
+    pvCamera.position.set(0, 2, 8);
+    pvControls.target.set(0, 0.5, 0);
+    pvControls.update();
+  });
+
+  // リサイズ
+  window.addEventListener('resize', () => {
+    pvCamera.aspect = window.innerWidth / window.innerHeight;
+    pvCamera.updateProjectionMatrix();
+    pvRenderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // アニメーションループ
+  (function animate() {
+    requestAnimationFrame(animate);
+    pvControls.update();
+    pvRenderer.render(pvScene, pvCamera);
+  })();
+
+  loadModel();
+})();
+</script>
+</body>
+</html>

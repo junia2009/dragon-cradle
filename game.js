@@ -150,6 +150,69 @@ function makeWingShape(pts, color, emissiveHex, emissiveInt = 0.3) {
   return new THREE.Mesh(geo, mat);
 }
 
+// 共通: ドラゴンウイング構築（帆型翼膜 + 骨格スパー2本）
+function buildBatWing(g, side, cfg) {
+  const zB = -0.12, zM = -0.15;
+  // ポイント定義（右翼正x系）
+  const SH  = [0.6, 0.35];   // 肩
+  const EL  = [1.5, 1.2];    // 肘（上方に高く）
+  const TIP = [3.2, 1.9];    // 翼先端（高く遠く）
+  const SP2 = [2.8, 0.1];    // 第2スパー先端（下方外側）
+  const TRL = [0.6, -0.2];   // 体側下端
+
+  function addBone(p1, p2, rT, rB, col, em, emI) {
+    const dx = p2[0]-p1[0], dy = p2[1]-p1[1];
+    const len = Math.sqrt(dx*dx + dy*dy);
+    const b = makeCylinder(rT, rB, len, col, em, emI);
+    b.position.set(side*(p1[0]+p2[0])/2, (p1[1]+p2[1])/2, zB);
+    b.rotation.z = -side * Math.atan2(dx, dy);
+    g.add(b);
+  }
+  function addJoint(p, r, col, em, emI) {
+    const j = makeSphere(r, col, em, emI);
+    j.position.set(side*p[0], p[1], zB);
+    g.add(j);
+  }
+  // 骨格: 肩→肘（上腕）
+  addJoint(SH, 0.08, cfg.bc, cfg.be, cfg.bi);
+  addBone(SH, EL, 0.05, 0.04, cfg.bc, cfg.be, cfg.bi);
+  addJoint(EL, 0.06, cfg.bc, cfg.be, cfg.bi);
+  // 肘→先端（メインスパー）
+  addBone(EL, TIP, 0.04, 0.018, cfg.bc, cfg.be, cfg.bi);
+  // 肘→下スパー
+  addBone(EL, SP2, 0.03, 0.014, cfg.bc, cfg.be, cfg.bi);
+  // 肘の鉤爪
+  const claw = makeCone(0.025, 0.13, cfg.bc, cfg.be, 0.7);
+  claw.position.set(side*(EL[0]+0.08), EL[1]-0.06, zB);
+  claw.rotation.x = 0.4;
+  claw.rotation.z = side * 0.3;
+  g.add(claw);
+  // 翼膜（1枚の大きな帆型 + 下縁スカラップ）
+  const membrane = makeWingShape([
+    SH,                         // 肩
+    EL,                         // 肘
+    [2.3, 1.65],                // メインスパー中間
+    TIP,                        // 翼先端
+    [3.1, 1.2],                 // 先端下（スカラップ山）
+    [2.8, 0.55],                // スパー間（谷）
+    [3.0, 0.35],                // スカラップ山
+    SP2,                        // 第2スパー先端
+    [2.0, -0.15],               // 下縁外（谷）
+    [1.5, 0.05],                // スカラップ山
+    [1.0, -0.2],                // 下縁内（谷）
+    TRL,                        // 体側下端
+  ], cfg.mc, cfg.me, cfg.mi);
+  membrane.position.z = zM;
+  if (side < 0) membrane.scale.x = -1;
+  g.add(membrane);
+
+  return {
+    tip:   [side*TIP[0], TIP[1], zB-0.08],
+    sp2:   [side*SP2[0], SP2[1], zB-0.08],
+    elbow: [side*EL[0], EL[1], zB],
+  };
+}
+
 // 共通: 星空パーティクル
 function createStarField(scene, count = 400) {
   const geo = new THREE.BufferGeometry();
@@ -893,136 +956,158 @@ function buildAdultDragon(attr) {
   throat.rotation.x = -0.2;
   g.add(throat);
 
-  // === 頭部（参考: 角張った長い吻、重厚な眉稜、開いた顎） ===
-  // 頭蓋骨上部（後頭部から前頭部）
-  const skull = makeEllipsoid(s.hRx*1.1, s.hRy*0.9, s.hRz*0.8, bodyColor, em, 0.2);
-  skull.position.set(0, 1.35, 0.85);
+  // === 頭部（シャープで一体的なドラゴンヘッド） ===
+  // メイン頭蓋（大きく角張った形状）
+  const skull = makeEllipsoid(s.hRx*1.2, s.hRy*1.05, s.hRz*0.9, bodyColor, em, 0.2);
+  skull.position.set(0, 1.38, 0.85);
   g.add(skull);
-  // 後頭部の張り出し
-  const occiput = makeEllipsoid(s.hRx*0.9, s.hRy*0.7, s.hRz*0.5, bodyColor, em, 0.18);
-  occiput.position.set(0, 1.4, 0.6);
-  g.add(occiput);
-  // 上顎（長く前方に伸びる角張った吻）
-  const upperJaw = makeEllipsoid(s.hRx*0.7, s.hRy*0.45, s.hRz*1.2, bodyColor, em, 0.2);
-  upperJaw.position.set(0, 1.25, 1.25);
-  g.add(upperJaw);
-  // 鼻先（先端を少し細く）
-  const snoutTip = makeEllipsoid(s.hRx*0.5, s.hRy*0.3, s.hRz*0.4, bodyColor, em, 0.2);
-  snoutTip.position.set(0, 1.22, 1.65);
+  // 吻部（上顎 — 短めに詰めてコンパクト）
+  const snout = makeEllipsoid(s.hRx*0.75, s.hRy*0.55, s.hRz*0.9, bodyColor, em, 0.2);
+  snout.position.set(0, 1.28, 1.15);
+  g.add(snout);
+  // 鼻先
+  const snoutTip = makeEllipsoid(s.hRx*0.55, s.hRy*0.4, s.hRz*0.25, bodyColor, em, 0.22);
+  snoutTip.position.set(0, 1.25, 1.38);
   g.add(snoutTip);
-  // 鼻梁（上面の角張った稜線）
-  const noseBridge = makeEllipsoid(s.hRx*0.35, 0.06, s.hRz*0.8, bodyColor, em, 0.22);
-  noseBridge.position.set(0, 1.38, 1.2);
+  // 鼻梁（上面の鋭い稜線）
+  const noseBridge = makeEllipsoid(s.hRx*0.2, 0.08, s.hRz*0.7, bodyColor, em, 0.25);
+  noseBridge.position.set(0, 1.42, 1.05);
   g.add(noseBridge);
-  // 下顎（分離した大きな下あご — 口が開いた状態）
-  const lowerJaw = makeEllipsoid(s.hRx*0.6, s.hRy*0.3, s.hRz*1.0, bodyColor, em, 0.18);
-  lowerJaw.position.set(0, 1.05, 1.15);
-  lowerJaw.rotation.x = 0.12;
+  // 下顎（しっかり開いた口）
+  const lowerJaw = makeEllipsoid(s.hRx*0.65, s.hRy*0.35, s.hRz*0.7, bodyColor, em, 0.18);
+  lowerJaw.position.set(0, 1.08, 1.05);
+  lowerJaw.rotation.x = 0.15;
   g.add(lowerJaw);
   // 下顎先端
-  const lowerJawTip = makeEllipsoid(s.hRx*0.4, s.hRy*0.2, s.hRz*0.35, bodyColor, em, 0.18);
-  lowerJawTip.position.set(0, 1.0, 1.52);
+  const lowerJawTip = makeEllipsoid(s.hRx*0.45, s.hRy*0.22, s.hRz*0.25, bodyColor, em, 0.18);
+  lowerJawTip.position.set(0, 1.03, 1.28);
   g.add(lowerJawTip);
-  // 口の中（暗い空間）
-  const mouthInside = makeEllipsoid(s.hRx*0.45, 0.06, s.hRz*0.5, '#050505', '#000000', 0);
-  mouthInside.position.set(0, 1.12, 1.3);
+  // 口の内部（暗い空洞）
+  const mouthInside = makeEllipsoid(s.hRx*0.5, 0.08, s.hRz*0.4, '#080808', '#000000', 0);
+  mouthInside.position.set(0, 1.15, 1.12);
   g.add(mouthInside);
-  // 牙（上顎 × 4）
-  [[-0.12, 1.15, 1.55], [0.12, 1.15, 1.55], [-0.08, 1.15, 1.35], [0.08, 1.15, 1.35]].forEach(([x,y,z], i) => {
-    const fh = i < 2 ? 0.18 : 0.12;
-    const fang = makeCone(0.025, fh, '#e8e0d0', '#ffffff', 0.5);
-    fang.position.set(x, y, z);
+  // 牙（上顎 — 前方2本が大きく、奥2本が小さい）
+  [[-0.1, 1.18, 1.32], [0.1, 1.18, 1.32], [-0.07, 1.18, 1.18], [0.07, 1.18, 1.18]].forEach(([x,y,z], i) => {
+    const fh = i < 2 ? 0.2 : 0.13;
+    const fang = makeCone(0.028, fh, '#e8e0d0', '#ffffff', 0.5);
+    fang.position.set(x, y-fh*0.5, z);
     fang.rotation.x = Math.PI;
     g.add(fang);
   });
-  // 牙（下顎 × 2 — 上向き）
-  [[-0.1, 1.08, 1.42], [0.1, 1.08, 1.42]].forEach(([x,y,z]) => {
-    const fang = makeCone(0.022, 0.14, '#e8e0d0', '#ffffff', 0.5);
+  // 牙（下顎 — 上向きに突き出す）
+  [[-0.09, 1.1, 1.22], [0.09, 1.1, 1.22]].forEach(([x,y,z]) => {
+    const fang = makeCone(0.024, 0.15, '#e8e0d0', '#ffffff', 0.5);
     fang.position.set(x, y, z);
     g.add(fang);
   });
-  // 重厚な眉稜（目の上に大きく張り出す骨）
+  // 眉稜（目の上に大きく庇のように張り出す）
   [[-1, 0], [1, 0]].forEach(([side]) => {
-    const browRidge = makeEllipsoid(0.14, 0.06, 0.12, bodyColor, em, 0.22);
-    browRidge.position.set(side*0.18, 1.48, 1.1);
+    const browRidge = makeEllipsoid(0.16, 0.07, 0.18, bodyColor, em, 0.25);
+    browRidge.position.set(side*0.17, 1.5, 1.0);
     g.add(browRidge);
-    // 眉稜の外側の突起（角張ったフード状）
-    const browHorn = makeEllipsoid(0.06, 0.04, 0.08, bodyColor, em, 0.2);
-    browHorn.position.set(side*0.28, 1.46, 1.05);
-    g.add(browHorn);
   });
-  // 頬骨（側面に張り出す）
+  // 頬骨（側面に鋭く張り出す）
   [[-1, 0], [1, 0]].forEach(([side]) => {
-    const cheek = makeEllipsoid(0.1, 0.08, 0.15, bodyColor, em, 0.18);
-    cheek.position.set(side*0.25, 1.22, 1.0);
+    const cheek = makeEllipsoid(0.12, 0.07, 0.2, bodyColor, em, 0.2);
+    cheek.position.set(side*0.28, 1.25, 0.92);
     g.add(cheek);
   });
-  // 目（深い眼窩の奥に光る鋭い目）
-  const eyeW = attr === 'thunder' ? 0.055 : 0.06;
-  const eyeH = attr === 'thunder' ? 0.025 : attr === 'ice' ? 0.05 : 0.035;
+  // 目（大きく光る鋭い目 — 顔の横に配置）
+  const eyeW = attr === 'thunder' ? 0.08 : 0.085;
+  const eyeH = attr === 'thunder' ? 0.04 : attr === 'ice' ? 0.065 : 0.05;
   [[-0.22, 0], [0.22, 0]].forEach(([x]) => {
+    // 眼窩（暗いくぼみ — 大きめ）
     const eyeSocket = makeEllipsoid(eyeW+0.04, eyeH+0.04, 0.05, '#020502', '#000000', 0);
-    eyeSocket.position.set(x, 1.38, 1.12);
+    eyeSocket.position.set(x, 1.38, 1.06);
     g.add(eyeSocket);
-    const eyeGlow = makeEllipsoid(eyeW+0.01, eyeH+0.01, 0.025, c, em, 0.8);
-    eyeGlow.position.set(x, 1.38, 1.14);
+    // 虹彩グロー（強く発光）
+    const eyeGlow = makeEllipsoid(eyeW+0.015, eyeH+0.015, 0.03, c, em, 1.2);
+    eyeGlow.position.set(x, 1.38, 1.08);
     g.add(eyeGlow);
-    const eye = makeEllipsoid(eyeW, eyeH, 0.02, '#ffffff', c, 1.4);
-    eye.position.set(x, 1.38, 1.16);
+    // 白目+虹彩（はっきり光る）
+    const eye = makeEllipsoid(eyeW, eyeH, 0.025, '#ffffff', c, 1.5);
+    eye.position.set(x, 1.38, 1.10);
     g.add(eye);
-    const pupil = makeEllipsoid(eyeW*0.3, eyeH*0.85, 0.012, '#000000', '#000000', 0);
-    pupil.position.set(x, 1.38, 1.17);
+    // 瞳孔（縦スリット）
+    const pupil = makeEllipsoid(eyeW*0.18, eyeH*0.85, 0.015, '#000000', '#000000', 0);
+    pupil.position.set(x, 1.38, 1.115);
     g.add(pupil);
   });
   // 鼻孔
   [[-0.06, 0], [0.06, 0]].forEach(([x]) => {
-    const nostril = makeSphere(0.025, c, em, 0.6);
-    nostril.position.set(x, 1.25, 1.78);
+    const nostril = makeSphere(0.028, c, em, 0.6);
+    nostril.position.set(x, 1.28, 1.48);
     g.add(nostril);
   });
-  // 頭頂のスパイク列（後頭部→鼻先に向かって小さくなる）
-  for (let i = 0; i < 6; i++) {
-    const spH = 0.12 - i*0.012;
-    const sp = makeCone(0.02, spH, bodyColor, em, 0.3);
-    sp.position.set(0, 1.52-i*0.02, 0.7+i*0.15);
-    sp.rotation.x = -0.2;
+  // 後頭部スパイク列（大→小、後ろに反る）
+  for (let i = 0; i < 5; i++) {
+    const spH = 0.16 - i*0.02;
+    const sp = makeCone(0.025, spH, bodyColor, em, 0.3);
+    sp.position.set(0, 1.55-i*0.015, 0.65+i*0.1);
+    sp.rotation.x = -0.35;
     g.add(sp);
   }
-  // 下顎のスパイク（アゴヒゲ的な突起 × 3）
+  // 下顎の棘（アゴヒゲの鋭い突起 × 3）
   for (let i = 0; i < 3; i++) {
-    const chinSpike = makeCone(0.018, 0.08+i*0.015, bodyColor, em, 0.2);
-    chinSpike.position.set(0, 0.95, 1.25+i*0.12);
+    const chinSpike = makeCone(0.02, 0.1+i*0.01, bodyColor, em, 0.2);
+    chinSpike.position.set(0, 0.98, 1.1+i*0.08);
     chinSpike.rotation.x = Math.PI * 0.85;
     g.add(chinSpike);
   }
 
-  // 足（体に合った四肢）
-  const legPositions = [[-0.45,-0.35,0.4],[0.45,-0.35,0.4],[-0.4,-0.35,-0.4],[0.4,-0.35,-0.4]];
-  legPositions.forEach(([x,y,z], li) => {
-    const isFront = li < 2;
-    const thighR = isFront ? 0.12 : 0.14;
-    const thigh = makeCylinder(thighR+0.02, thighR, 0.4, bodyColor, em, 0.15);
-    thigh.position.set(x, y, z);
+  // 脚（太く頑丈な四肢）
+  const legPositions = [[-0.42,-0.2,0.35],[0.42,-0.2,0.35],[-0.38,-0.15,-0.38],[0.38,-0.15,-0.38]];
+  // 前脚
+  [[-0.42,-0.2,0.35],[0.42,-0.2,0.35]].forEach(([x,y,z]) => {
+    // 太もも（太い楕円体）
+    const thigh = makeEllipsoid(0.2, 0.25, 0.2, bodyColor, em, 0.15);
+    thigh.position.set(x, y-0.05, z);
     g.add(thigh);
-    const thighMuscle = makeEllipsoid(thighR+0.03, 0.12, thighR+0.02, bodyColor, em, 0.13);
-    thighMuscle.position.set(x, y+0.04, z);
-    g.add(thighMuscle);
-    const shin = makeCylinder(thighR*0.7, thighR*0.5, 0.35, bodyColor, em, 0.15);
-    shin.position.set(x, y-0.38, z+0.02);
+    // 脛（太いテーパーシリンダー）
+    const shin = makeCylinder(0.16, 0.12, 0.35, bodyColor, em, 0.15);
+    shin.position.set(x, y-0.3, z+0.03);
     g.add(shin);
-    const foot = makeEllipsoid(0.15, 0.06, 0.2, bodyColor, em, 0.15);
-    foot.position.set(x, y-0.58, z+0.06);
+    // 足（がっしりした楕円体）
+    const foot = makeEllipsoid(0.15, 0.07, 0.18, bodyColor, em, 0.12);
+    foot.position.set(x, y-0.52, z+0.08);
     g.add(foot);
-    for (let ci = 0; ci < 4; ci++) {
-      const claw = makeCone(0.03, 0.16, c, em, 0.7);
-      claw.position.set(x+(-0.06+ci*0.04), y-0.63, z+0.16);
-      claw.rotation.x = 0.55;
+    // 爪×3（足の前端から生える）
+    for (let ti = 0; ti < 3; ti++) {
+      const angle = (ti - 1) * 0.7;
+      const tx = x + Math.sin(angle) * 0.12;
+      const tz = z + 0.08 + 0.14 + Math.cos(angle) * 0.04;
+      const claw = makeCone(0.035, 0.13, c, em, 0.7);
+      claw.position.set(tx, y-0.52, tz);
+      claw.rotation.x = Math.PI/2 + 0.3;
+      claw.rotation.y = angle * 0.5;
       g.add(claw);
     }
-    const backClaw = makeCone(0.02, 0.1, c, em, 0.5);
-    backClaw.position.set(x, y-0.58, z-0.1);
-    backClaw.rotation.x = -0.5;
-    g.add(backClaw);
+  });
+  // 後脚（前脚よりさらに太く筋肉質）
+  [[-0.38,-0.15,-0.38],[0.38,-0.15,-0.38]].forEach(([x,y,z]) => {
+    // 太もも（巨大な楕円体）
+    const thigh = makeEllipsoid(0.24, 0.3, 0.24, bodyColor, em, 0.15);
+    thigh.position.set(x, y-0.02, z);
+    g.add(thigh);
+    // 脛（太いテーパー）
+    const shin = makeCylinder(0.18, 0.13, 0.4, bodyColor, em, 0.15);
+    shin.position.set(x, y-0.32, z+0.04);
+    g.add(shin);
+    // 足（がっしりした楕円体）
+    const foot = makeEllipsoid(0.17, 0.08, 0.2, bodyColor, em, 0.12);
+    foot.position.set(x, y-0.58, z+0.1);
+    g.add(foot);
+    // 爪×3（足の前端から生える）
+    for (let ti = 0; ti < 3; ti++) {
+      const angle = (ti - 1) * 0.75;
+      const tx = x + Math.sin(angle) * 0.14;
+      const tz = z + 0.1 + 0.16 + Math.cos(angle) * 0.05;
+      const claw = makeCone(0.04, 0.15, c, em, 0.7);
+      claw.position.set(tx, y-0.58, tz);
+      claw.rotation.x = Math.PI/2 + 0.3;
+      claw.rotation.y = angle * 0.5;
+      g.add(claw);
+    }
   });
 
   // === 属性別固有パーツ ===
@@ -1046,46 +1131,22 @@ function buildAdultDragon(attr) {
       sideHorn.rotation.z = x<0 ? -0.5 : 0.5;
       g.add(sideHorn);
     });
-    // ---- 翼（骨2本 + コウモリ翼膜） ----
+    // ---- 翼（解剖学的バットウイング + 炎装飾） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingJoint = makeSphere(0.09, c, em, 0.4);
-      wingJoint.position.set(side*0.55, 0.4, -0.1);
-      g.add(wingJoint);
-      const wingBone1 = makeCylinder(0.05, 0.035, 1.6, c, em, 0.5);
-      wingBone1.position.set(side*1.1, 0.8, -0.15);
-      wingBone1.rotation.z = side*0.6;
-      wingBone1.rotation.x = 0.1;
-      g.add(wingBone1);
-      const wingBone2 = makeCylinder(0.035, 0.02, 1.2, '#FF8C00', em, 0.6);
-      wingBone2.position.set(side*2.0, 1.45, -0.3);
-      wingBone2.rotation.z = side*0.95;
-      g.add(wingBone2);
-      const wingElbow = makeSphere(0.045, c, em, 0.6);
-      wingElbow.position.set(side*1.6, 1.15, -0.22);
-      g.add(wingElbow);
-      // 翼膜（コウモリ翼ポリゴン）
-      const wm = makeWingShape([
-        [0.55, 0.35],   // 肩ジョイント
-        [1.6, 1.15],    // 肘
-        [2.5, 1.8],     // 翼先端
-        [2.3, 0.7],     // 先端下
-        [1.8, 0.15],    // 外側下（スカラップ谷）
-        [2.0, 0.5],     // スカラップ山
-        [1.3, -0.05],   // 中間下（スカラップ谷）
-        [1.5, 0.3],     // スカラップ山
-        [0.8, -0.15],   // 内側下（スカラップ谷）
-        [0.55, 0.0],    // 体際の下端
-      ], c, em, 0.25);
-      wm.position.z = -0.15;
-      if (side < 0) wm.scale.x = -1;
-      g.add(wm);
+      const w = buildBatWing(g, side, {
+        bc: c, be: em, bi: 0.5, mc: c, me: em, mi: 0.25,
+      });
       // 翼先端の炎
-      const wingFlame = makeSphere(0.09, '#FF8C00', em, 1.0);
-      wingFlame.position.set(side*2.6, 1.9, -0.4);
-      g.add(wingFlame);
-      const wingFlame2 = makeSphere(0.05, '#FFD700', em, 1.2);
-      wingFlame2.position.set(side*2.7, 2.0, -0.42);
-      g.add(wingFlame2);
+      const wf1 = makeSphere(0.09, '#FF8C00', em, 1.0);
+      wf1.position.set(...w.tip);
+      g.add(wf1);
+      const wf2 = makeSphere(0.05, '#FFD700', em, 1.2);
+      wf2.position.set(w.tip[0]*1.02, w.tip[1]+0.1, w.tip[2]-0.02);
+      g.add(wf2);
+      // 下スパー先端にも炎
+      const wf3 = makeSphere(0.06, '#FF8C00', em, 0.8);
+      wf3.position.set(...w.sp2);
+      g.add(wf3);
     });
     // ---- 尻尾（球7個 → 炎2段） ----
     const tailData = [
@@ -1162,44 +1223,22 @@ function buildAdultDragon(attr) {
       gem.position.set(-0.1+i*0.05, 1.55+h*0.3, 1.0);
       g.add(gem);
     }
-    // ---- 翼（骨2本 + コウモリ翼膜） ----
+    // ---- 翼（解剖学的バットウイング + 氷結晶） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingJoint = makeSphere(0.07, c, em, 0.35);
-      wingJoint.position.set(side*0.55, 0.4, -0.08);
-      g.add(wingJoint);
-      const wingBone1 = makeCylinder(0.045, 0.03, 1.5, c, em, 0.4);
-      wingBone1.position.set(side*1.0, 0.75, -0.12);
-      wingBone1.rotation.z = side*0.55;
-      g.add(wingBone1);
-      const wingBone2 = makeCylinder(0.03, 0.018, 1.1, '#ffffff', '#aaddff', 0.7);
-      wingBone2.position.set(side*1.8, 1.35, -0.28);
-      wingBone2.rotation.z = side*0.9;
-      g.add(wingBone2);
-      const wingElbow = makeSphere(0.04, '#ffffff', '#aaddff', 0.6);
-      wingElbow.position.set(side*1.45, 1.1, -0.2);
-      g.add(wingElbow);
-      // 翼膜（コウモリ翼ポリゴン）
-      const wm = makeWingShape([
-        [0.5, 0.3],
-        [1.45, 1.1],
-        [2.3, 1.65],
-        [2.1, 0.6],
-        [1.6, 0.1],
-        [1.8, 0.4],
-        [1.1, -0.1],
-        [1.3, 0.2],
-        [0.7, -0.15],
-        [0.5, -0.05],
-      ], '#ffffff', '#aaddff', 0.25);
-      wm.position.z = -0.1;
-      if (side < 0) wm.scale.x = -1;
-      g.add(wm);
-      for (let k = 0; k < 3; k++) {
-        const crystal = makeCone(0.025, 0.1+k*0.03, '#ffffff', '#aaddff', 1.0+k*0.1);
-        crystal.position.set(side*(2.3+k*0.06), 1.65+k*0.06, -0.35);
-        crystal.rotation.z = side*(1.0+k*0.15);
+      const w = buildBatWing(g, side, {
+        bc: c, be: em, bi: 0.4, mc: '#ffffff', me: '#aaddff', mi: 0.25,
+      });
+      // 翼先端の氷結晶
+      [w.tip, w.sp2].forEach((tip, k) => {
+        const crystal = makeCone(0.035, 0.15-k*0.03, '#ffffff', '#aaddff', 1.0+k*0.1);
+        crystal.position.set(tip[0], tip[1]+0.05, tip[2]);
+        crystal.rotation.z = side*(0.8+k*0.3);
         g.add(crystal);
-      }
+        const shard = makeCone(0.018, 0.09, '#ffffff', '#aaddff', 1.2);
+        shard.position.set(tip[0]+side*0.05, tip[1]-0.02, tip[2]);
+        shard.rotation.z = side*(1.2+k*0.2);
+        g.add(shard);
+      });
     });
     // ---- 氷の装甲 ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
@@ -1279,48 +1318,24 @@ function buildAdultDragon(attr) {
       neckBolt.rotation.z = (i%2-0.5)*0.8;
       g.add(neckBolt);
     }
-    // ---- 翼（骨2本 + コウモリ翼膜 + 稲妻ライン） ----
+    // ---- 翼（解剖学的バットウイング + 稲妻） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingJoint = makeSphere(0.06, c, em, 0.5);
-      wingJoint.position.set(side*0.48, 0.35, -0.1);
-      g.add(wingJoint);
-      const wingBone1 = makeCylinder(0.04, 0.025, 1.8, c, em, 0.5);
-      wingBone1.position.set(side*1.0, 0.65, -0.15);
-      wingBone1.rotation.z = side*0.6;
-      wingBone1.rotation.x = 0.1;
-      g.add(wingBone1);
-      const wingBone2 = makeCylinder(0.025, 0.015, 1.4, c, em, 0.7);
-      wingBone2.position.set(side*2.0, 1.3, -0.35);
-      wingBone2.rotation.z = side*1.0;
-      g.add(wingBone2);
-      const wingElbow = makeSphere(0.035, c, em, 0.6);
-      wingElbow.position.set(side*1.55, 1.0, -0.25);
-      g.add(wingElbow);
-      // 翼膜（ギザギザ翼ポリゴン — 雷らしい鋭角）
-      const wm = makeWingShape([
-        [0.48, 0.3],
-        [1.55, 1.0],
-        [2.65, 1.7],
-        [2.4, 0.65],
-        [1.9, 0.05],
-        [2.15, 0.45],
-        [1.4, -0.1],
-        [1.6, 0.2],
-        [0.9, -0.2],
-        [0.48, -0.05],
-      ], c, em, 0.3);
-      wm.position.z = -0.15;
-      if (side < 0) wm.scale.x = -1;
-      g.add(wm);
-      for (let j = 0; j < 2; j++) {
-        const bolt = makeCylinder(0.01, 0.01, 0.4+j*0.08, '#ffffff', c, 1.0);
-        bolt.position.set(side*(1.2+j*0.4), 0.55-j*0.12, -0.2-j*0.08);
-        bolt.rotation.z = side*(0.6+j*0.18);
+      const w = buildBatWing(g, side, {
+        bc: c, be: em, bi: 0.5, mc: c, me: em, mi: 0.3,
+      });
+      // 翼膜上の稲妻ライン
+      for (let j = 0; j < 3; j++) {
+        const bolt = makeCylinder(0.01, 0.01, 0.35+j*0.06, '#ffffff', c, 1.0);
+        bolt.position.set(side*(1.4+j*0.5), 0.7-j*0.15, -0.2-j*0.05);
+        bolt.rotation.z = side*(0.5+j*0.2);
         g.add(bolt);
       }
-      const wingSpark = makeSphere(0.045, '#ffffff', c, 1.3);
-      wingSpark.position.set(side*2.65, 1.7, -0.45);
-      g.add(wingSpark);
+      // 先端のスパーク
+      [w.tip, w.sp2].forEach(tip => {
+        const spark = makeSphere(0.045, '#ffffff', c, 1.3);
+        spark.position.set(...tip);
+        g.add(spark);
+      });
     });
     // ---- ジグザグ尻尾 ----
     const tailData = [
@@ -1411,49 +1426,23 @@ function buildAdultDragon(attr) {
       neckRune.position.set(0.1*(i%2===0?1:-1), 0.55+i*0.12, 0.48+i*0.03);
       g.add(neckRune);
     }
-    // ---- 翼（骨3本 + コウモリ翼膜 + 闇のエッジ） ----
+    // ---- 翼（解剖学的バットウイング + 闇のオーラ） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingJoint = makeSphere(0.07, c, em, 0.3);
-      wingJoint.position.set(side*0.58, 0.35, -0.08);
-      g.add(wingJoint);
-      const wingBone1 = makeCylinder(0.045, 0.03, 1.6, c, em, 0.35);
-      wingBone1.position.set(side*1.1, 0.8, -0.15);
-      wingBone1.rotation.z = side*0.5;
-      g.add(wingBone1);
-      const wingBone2 = makeCylinder(0.03, 0.02, 1.3, c, em, 0.5);
-      wingBone2.position.set(side*2.1, 1.45, -0.35);
-      wingBone2.rotation.z = side*0.9;
-      g.add(wingBone2);
-      const wingBone3 = makeCylinder(0.02, 0.012, 0.85, c, em, 0.4);
-      wingBone3.position.set(side*2.8, 1.85, -0.48);
-      wingBone3.rotation.z = side*1.1;
-      g.add(wingBone3);
-      // 翼膜（コウモリ翼ポリゴン — 闇は大きく広い）
-      const wm = makeWingShape([
-        [0.55, 0.25],
-        [1.65, 1.15],
-        [2.8, 1.85],
-        [2.6, 0.8],
-        [2.1, 0.1],
-        [2.3, 0.55],
-        [1.6, -0.1],
-        [1.8, 0.3],
-        [1.0, -0.2],
-        [1.2, 0.1],
-        [0.55, -0.1],
-      ], bodyColor, em, 0.05);
-      wm.position.z = -0.12;
-      if (side < 0) wm.scale.x = -1;
-      g.add(wm);
+      const w = buildBatWing(g, side, {
+        bc: c, be: em, bi: 0.35, mc: bodyColor, me: em, mi: 0.05,
+      });
       // 翼のエッジグロー
-      for (let k = 0; k < 4; k++) {
-        const edgeGlow = makeSphere(0.02, c, em, 0.8+k*0.1);
-        edgeGlow.position.set(side*(1.2+k*0.45), 0.8-k*0.04, -0.18-k*0.06);
-        g.add(edgeGlow);
+      [w.tip, w.sp2].forEach((tip, k) => {
+        const glow = makeSphere(0.035, c, em, 0.9+k*0.2);
+        glow.position.set(tip[0], tip[1], tip[2]);
+        g.add(glow);
+      });
+      // 翼膜上の魔法紋様
+      for (let k = 0; k < 5; k++) {
+        const rune = makeSphere(0.02, c, em, 0.6+k*0.1);
+        rune.position.set(side*(1.2+k*0.38), 0.7-k*0.12, -0.18-k*0.03);
+        g.add(rune);
       }
-      const wingElbow = makeSphere(0.04, c, em, 0.6);
-      wingElbow.position.set(side*1.65, 1.15, -0.25);
-      g.add(wingElbow);
     });
     // ---- 長い尻尾（球8個 + 光る先端） ----
     const tailData = [
@@ -1504,9 +1493,12 @@ function buildAdultDragon(attr) {
   // === 育成タイプによる追加装飾 ===
   if (type === 'attacker') {
     // アタッカー：大きな爪 + 牙 + 額の傷跡
-    legPositions.forEach(([x,y,z]) => {
+    legPositions.forEach(([x,y,z], li) => {
+      const isFront = li < 2;
+      const clawY = isFront ? y-0.54 : y-0.6;
+      const clawZ = isFront ? z+0.18 : z+0.22;
       const bigClaw = makeCone(0.065, 0.28, c, em, 0.9);
-      bigClaw.position.set(x, y-0.78, z+0.24);
+      bigClaw.position.set(x, clawY, clawZ);
       bigClaw.rotation.x = 0.6;
       g.add(bigClaw);
     });
