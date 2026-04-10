@@ -1822,7 +1822,9 @@ function initBattleScene(attr) {
   if (battleRenderer) { battleRenderer.dispose(); }
 
   battleScene = new THREE.Scene();
-  battleScene.fog = new THREE.FogExp2(0x0a0010, 0.022);
+  const battleBg = 0x1a1020;
+  battleScene.background = new THREE.Color(battleBg);
+  battleScene.fog = new THREE.FogExp2(battleBg, 0.018);
 
   battleCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
   battleCamera.position.set(0, 2, 12);
@@ -1834,7 +1836,9 @@ function initBattleScene(attr) {
   battleRenderer.toneMapping = THREE.ACESFilmicToneMapping;
   battleRenderer.toneMappingExposure = 1.2;
 
-  battleScene.add(new THREE.AmbientLight(0x334466, 0.6));
+  battleScene.add(new THREE.AmbientLight(0x889aaa, 1.0));
+  const hemi = new THREE.HemisphereLight(0xddeeff, 0x445566, 0.6);
+  battleScene.add(hemi);
   const ptPlayer = new THREE.PointLight(hexToThreeColor(ATTR[attr].color), 1.5, 20);
   ptPlayer.position.set(-4, 3, 4);
   battleScene.add(ptPlayer);
@@ -1844,7 +1848,13 @@ function initBattleScene(attr) {
   ptEnemy.position.set(4, 3, 4);
   battleScene.add(ptEnemy);
 
-  createStarField(battleScene);
+  // 地面
+  const bGroundGeo = new THREE.PlaneGeometry(60, 60);
+  const bGroundMat = new THREE.MeshStandardMaterial({ color: battleBg, roughness: 0.9, metalness: 0.1 });
+  const bGround = new THREE.Mesh(bGroundGeo, bGroundMat);
+  bGround.rotation.x = -Math.PI / 2;
+  bGround.position.y = -0.7;
+  battleScene.add(bGround);
 
   // プレイヤードラゴン（左）
   playerDragonGroup = state.stage === 'adult' ? buildAdultDragon(attr) : buildBabyDragon(attr);
