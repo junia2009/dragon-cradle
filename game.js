@@ -820,10 +820,10 @@ function buildAdultDragon(attr) {
 
   // === 属性別の体型パラメータ（前後に長い流線型、頭は小さめ） ===
   const shapes = {
-    fire:    { bRx:1.1, bRy:0.55, bRz:0.6, nR:0.22, nH:1.1, hRx:0.38, hRy:0.32, hRz:0.52, hornH:0.9 },
-    ice:     { bRx:1.05, bRy:0.6, bRz:0.65, nR:0.2,  nH:0.95, hRx:0.4, hRy:0.32, hRz:0.48, hornH:0.7 },
-    thunder: { bRx:1.0, bRy:0.45, bRz:0.5, nR:0.18, nH:1.15, hRx:0.34, hRy:0.28, hRz:0.5, hornH:0.6 },
-    dark:    { bRx:1.08, bRy:0.52, bRz:0.58, nR:0.2,  nH:1.05, hRx:0.36, hRy:0.3, hRz:0.5, hornH:1.0 },
+    fire:    { bRx:0.6, bRy:0.55, bRz:1.0, nR:0.22, nH:1.1, hRx:0.32, hRy:0.28, hRz:0.42, hornH:0.9 },
+    ice:     { bRx:0.55, bRy:0.55, bRz:1.0, nR:0.2,  nH:0.95, hRx:0.3, hRy:0.27, hRz:0.4, hornH:0.7 },
+    thunder: { bRx:0.5, bRy:0.45, bRz:0.95, nR:0.18, nH:1.15, hRx:0.28, hRy:0.24, hRz:0.4, hornH:0.6 },
+    dark:    { bRx:0.58, bRy:0.52, bRz:1.0, nR:0.2,  nH:1.05, hRx:0.3, hRy:0.26, hRz:0.42, hornH:1.0 },
   };
   const s = shapes[attr];
 
@@ -982,13 +982,13 @@ function buildAdultDragon(attr) {
       const wingElbow = makeSphere(0.045, c, em, 0.6);
       wingElbow.position.set(side*1.6, 1.15, -0.22);
       g.add(wingElbow);
-      // 翼膜（大きな面として幅広楕円 × 3段）
+      // 翼膜（横に長い翼パネル × 3段）
       for (let j = 0; j < 3; j++) {
-        const memW = 0.7 - j*0.15;
-        const memH = 0.6 - j*0.12;
+        const memW = 0.9 - j*0.2;
+        const memH = 0.2 - j*0.04;
         const mem = makeEllipsoid(memW, memH, 0.015, j<2 ? c : '#FF8C00', em, 0.2+j*0.1);
-        mem.position.set(side*(0.9+j*0.35), 0.35-j*0.08, -0.15-j*0.04);
-        mem.rotation.z = side*(0.35+j*0.15);
+        mem.position.set(side*(1.1+j*0.4), 0.5+j*0.15, -0.15-j*0.04);
+        mem.rotation.z = side*(0.4+j*0.15);
         g.add(mem);
       }
       // 翼先端の炎
@@ -1090,13 +1090,13 @@ function buildAdultDragon(attr) {
       const wingElbow = makeSphere(0.04, '#ffffff', '#aaddff', 0.6);
       wingElbow.position.set(side*1.45, 1.1, -0.2);
       g.add(wingElbow);
-      // 翼膜（大きな面）
+      // 翼膜（横に長い翼パネル）
       for (let j = 0; j < 3; j++) {
-        const memW = 0.6 - j*0.12;
-        const memH = 0.5 - j*0.1;
+        const memW = 0.85 - j*0.18;
+        const memH = 0.18 - j*0.03;
         const mem = makeEllipsoid(memW, memH, 0.012, '#ffffff', '#aaddff', 0.2+j*0.12);
-        mem.position.set(side*(0.8+j*0.3), 0.3-j*0.06, -0.08-j*0.04);
-        mem.rotation.z = side*(0.35+j*0.15);
+        mem.position.set(side*(1.0+j*0.35), 0.45+j*0.15, -0.08-j*0.04);
+        mem.rotation.z = side*(0.4+j*0.15);
         g.add(mem);
       }
       for (let k = 0; k < 3; k++) {
@@ -1201,13 +1201,13 @@ function buildAdultDragon(attr) {
       const wingElbow = makeSphere(0.035, c, em, 0.6);
       wingElbow.position.set(side*1.55, 1.0, -0.25);
       g.add(wingElbow);
-      // 翼膜（大きな面）
+      // 翼膜（横に長い翼パネル）
       for (let j = 0; j < 3; j++) {
-        const memW = 0.65 - j*0.13;
-        const memH = 0.55 - j*0.1;
+        const memW = 0.9 - j*0.2;
+        const memH = 0.18 - j*0.03;
         const mem = makeEllipsoid(memW, memH, 0.012, c, em, 0.2+j*0.15);
-        mem.position.set(side*(0.8+j*0.35), 0.25-j*0.08, -0.12-j*0.05);
-        mem.rotation.z = side*(0.35+j*0.18);
+        mem.position.set(side*(1.0+j*0.4), 0.4+j*0.12, -0.12-j*0.05);
+        mem.rotation.z = side*(0.4+j*0.18);
         g.add(mem);
       }
       for (let j = 0; j < 2; j++) {
@@ -1312,7 +1312,7 @@ function buildAdultDragon(attr) {
     // ---- 翼（骨3本 + 暗膜5枚 + 闇のエッジ） ----
     [[-1, 0], [1, 0]].forEach(([side]) => {
       const wingJoint = makeSphere(0.07, c, em, 0.3);
-      wingJoint.position.set(side*0.75, 0.35, -0.08);
+      wingJoint.position.set(side*0.58, 0.35, -0.08);
       g.add(wingJoint);
       const wingBone1 = makeCylinder(0.045, 0.03, 1.6, c, em, 0.35);
       wingBone1.position.set(side*1.1, 0.8, -0.15);
@@ -1327,9 +1327,9 @@ function buildAdultDragon(attr) {
       wingBone3.rotation.z = side*1.1;
       g.add(wingBone3);
       for (let j = 0; j < 5; j++) {
-        const memW = 0.55-j*0.07, memH = 0.65-j*0.08;
+        const memW = 0.7-j*0.1, memH = 0.18-j*0.025;
         const mem = makeEllipsoid(memW, memH, 0.012, bodyColor, em, 0.02+j*0.015);
-        mem.position.set(side*(1.3+j*0.35), 0.55-j*0.06, -0.12-j*0.06);
+        mem.position.set(side*(1.2+j*0.35), 0.45+j*0.12, -0.12-j*0.06);
         mem.rotation.z = side*(0.42+j*0.15);
         g.add(mem);
       }
