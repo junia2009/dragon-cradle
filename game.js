@@ -112,6 +112,32 @@ function makeBox(w, h, d, color, emissiveHex, emissiveInt = 0.3) {
   });
   return new THREE.Mesh(geo, mat);
 }
+function _makeMat(color, emissiveHex, emissiveInt, extra) {
+  return new THREE.MeshStandardMaterial(Object.assign({
+    color: hexToThreeColor(color),
+    emissive: hexToThreeColor(emissiveHex || color),
+    emissiveIntensity: emissiveInt,
+    metalness: 0.25,
+    roughness: 0.55,
+  }, extra || {}));
+}
+function makeSphere(r, color, emissiveHex, emissiveInt = 0.3, wSeg = 16, hSeg = 12) {
+  return new THREE.Mesh(new THREE.SphereGeometry(r, wSeg, hSeg), _makeMat(color, emissiveHex, emissiveInt));
+}
+function makeEllipsoid(rx, ry, rz, color, emissiveHex, emissiveInt = 0.3) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), _makeMat(color, emissiveHex, emissiveInt));
+  m.scale.set(rx, ry, rz);
+  return m;
+}
+function makeCylinder(rTop, rBot, h, color, emissiveHex, emissiveInt = 0.3, seg = 12) {
+  return new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, seg), _makeMat(color, emissiveHex, emissiveInt));
+}
+function makeCone(r, h, color, emissiveHex, emissiveInt = 0.3, seg = 10) {
+  return new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), _makeMat(color, emissiveHex, emissiveInt));
+}
+function makeTorus(r, tube, color, emissiveHex, emissiveInt = 0.3) {
+  return new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, 16), _makeMat(color, emissiveHex, emissiveInt));
+}
 
 // 共通: 星空パーティクル
 function createStarField(scene, count = 400) {
@@ -527,7 +553,7 @@ function initRaiseScene(attr) {
   }); // requestAnimationFrame end
 }
 
-// ---- ドラゴンモデル（ボクセル） ----
+// ---- ドラゴンモデル（スムーズ） ----
 function buildDragonModel(attr, stage) {
   if (dragonGroup) raiseScene.remove(dragonGroup);
   attrEffectParticles = [];
@@ -537,190 +563,218 @@ function buildDragonModel(attr, stage) {
   raiseScene.add(dragonGroup);
 }
 
-// 幼体：まんまるちびドラゴン（属性別デザイン）
+// 幼体：まんまるスムーズちびドラゴン（属性別デザイン）
 function buildBabyDragon(attr) {
   const g = new THREE.Group();
   const c  = ATTR[attr].color;
   const em = ATTR[attr].emissive;
   const bodyColor = '#1a2a1a';
 
-  // === 共通ベース：まんまる体型 ===
-  // 体（まんまる）
-  const body = makeBox(1.6, 1.6, 1.5, bodyColor, em, 0.15);
+  // === 共通ベース：まんまるスムーズ体型 ===
+  // 体（大きな球）
+  const body = makeEllipsoid(0.85, 0.8, 0.75, bodyColor, em, 0.15);
   body.position.y = 0;
   g.add(body);
 
-  // 頭（体より大きい＝ちび感）
-  const head = makeBox(1.7, 1.6, 1.5, bodyColor, em, 0.15);
-  head.position.set(0, 1.4, 0.15);
+  // おなか（明るめ）
+  const belly = makeEllipsoid(0.6, 0.55, 0.3, '#2a3a2a', em, 0.1);
+  belly.position.set(0, -0.15, 0.45);
+  g.add(belly);
+
+  // 頭（体より大きい球＝ちび感）
+  const head = makeSphere(0.9, bodyColor, em, 0.15);
+  head.position.set(0, 1.25, 0.15);
   g.add(head);
 
-  // ほっぺ（ぷにっと丸み）
-  [[-0.75, 1.1], [0.75, 1.1]].forEach(([x, y]) => {
-    const cheek = makeBox(0.35, 0.3, 0.2, c, em, 0.2);
-    cheek.position.set(x, y, 0.7);
+  // ほっぺ（小さい球でぷにっと）
+  [[-0.6, 1.0], [0.6, 1.0]].forEach(([x, y]) => {
+    const cheek = makeSphere(0.2, c, em, 0.25);
+    cheek.position.set(x, y, 0.6);
     g.add(cheek);
   });
 
-  // 目（おおきくてまんまる）
-  [[-0.38, 0], [0.38, 0]].forEach(([x]) => {
-    const eyeWhite = makeBox(0.38, 0.38, 0.15, '#ffffff', '#ffffff', 0.3);
-    eyeWhite.position.set(x, 1.5, 0.8);
+  // 目（大きくてまんまる）
+  [[-0.3, 0], [0.3, 0]].forEach(([x]) => {
+    const eyeWhite = makeSphere(0.22, '#ffffff', '#ffffff', 0.3);
+    eyeWhite.position.set(x, 1.35, 0.7);
     g.add(eyeWhite);
-    const eye = makeBox(0.26, 0.28, 0.1, '#111111', '#000000', 0);
-    eye.position.set(x, 1.48, 0.86);
-    g.add(eye);
+    const iris = makeSphere(0.15, '#111111', '#000000', 0);
+    iris.position.set(x, 1.34, 0.82);
+    g.add(iris);
     // ハイライト
-    const hl = makeBox(0.1, 0.1, 0.06, '#ffffff', '#ffffff', 1.0);
-    hl.position.set(x + 0.06, 1.56, 0.9);
+    const hl = makeSphere(0.06, '#ffffff', '#ffffff', 1.0);
+    hl.position.set(x + 0.06, 1.42, 0.88);
     g.add(hl);
   });
 
-  // 口（にっこり線）
-  const mouth = makeBox(0.3, 0.06, 0.1, c, em, 0.5);
-  mouth.position.set(0, 1.05, 0.85);
+  // 口（にっこりトーラス）
+  const mouth = makeTorus(0.12, 0.025, c, em, 0.5);
+  mouth.position.set(0, 0.95, 0.8);
+  mouth.rotation.x = 0.3;
+  mouth.rotation.z = Math.PI;
   g.add(mouth);
 
-  // ぷにぷに足（短くて太い）
-  [[-0.55, -1.0, 0.3], [0.55, -1.0, 0.3], [-0.45, -1.0, -0.35], [0.45, -1.0, -0.35]].forEach(([x,y,z]) => {
-    const leg = makeBox(0.4, 0.4, 0.4, bodyColor, em, 0.1);
+  // 鼻（ちょこんと球）
+  const nose = makeEllipsoid(0.08, 0.06, 0.06, c, em, 0.4);
+  nose.position.set(0, 1.1, 0.88);
+  g.add(nose);
+
+  // ぷにぷに足（球で短くて太い）
+  [[-0.45, -0.85, 0.3], [0.45, -0.85, 0.3], [-0.35, -0.85, -0.3], [0.35, -0.85, -0.3]].forEach(([x,y,z]) => {
+    const leg = makeEllipsoid(0.22, 0.2, 0.22, bodyColor, em, 0.1);
     leg.position.set(x, y, z);
     g.add(leg);
-    // 肉球的なアクセント
-    const pad = makeBox(0.2, 0.08, 0.2, c, em, 0.4);
-    pad.position.set(x, y - 0.22, z);
+    // 肉球
+    const pad = makeSphere(0.1, c, em, 0.4);
+    pad.position.set(x, y - 0.17, z);
     g.add(pad);
   });
 
   // === 属性別パーツ ===
   if (attr === 'fire') {
-    // 炎：頭の上にちっちゃい炎模様 + ギザ尻尾
+    // 炎：頭の上にちいさな炎冠
     for (let i = 0; i < 3; i++) {
-      const flame = makeBox(0.15 - i*0.03, 0.25 - i*0.05, 0.12, c, em, 0.9);
-      flame.position.set((i-1)*0.2, 2.3 + i*0.15, 0.15);
+      const flame = makeEllipsoid(0.08 - i*0.015, 0.16 - i*0.03, 0.06, c, em, 0.9);
+      flame.position.set((i-1)*0.18, 2.2 + i*0.12, 0.15);
       flame.rotation.z = (i-1) * 0.3;
       g.add(flame);
     }
-    // ギザギザ尻尾
-    const tail1 = makeBox(0.45, 0.4, 0.4, bodyColor, em, 0.1);
-    tail1.position.set(0, -0.4, -0.95);
+    const flameTop = makeSphere(0.07, '#FF8C00', em, 1.0);
+    flameTop.position.set(0, 2.55, 0.15);
+    g.add(flameTop);
+    // ぷに尻尾（球の連鎖 → 炎先端）
+    const tail1 = makeSphere(0.28, bodyColor, em, 0.1);
+    tail1.position.set(0, -0.3, -0.85);
     g.add(tail1);
-    const tail2 = makeBox(0.35, 0.35, 0.35, c, em, 0.5);
-    tail2.position.set(0, -0.5, -1.4);
+    const tail2 = makeSphere(0.2, bodyColor, em, 0.1);
+    tail2.position.set(0, -0.42, -1.2);
     g.add(tail2);
-    const tailFlame = makeBox(0.25, 0.4, 0.2, '#FF8C00', em, 0.8);
-    tailFlame.position.set(0, -0.3, -1.7);
+    const tailFlame = makeEllipsoid(0.15, 0.22, 0.12, c, em, 0.9);
+    tailFlame.position.set(0, -0.35, -1.5);
     g.add(tailFlame);
-    // 小さな翼（炎模様）
-    [[-1.1, 0], [1.1, 0]].forEach(([x]) => {
-      const wing = makeBox(0.12, 0.55, 0.6, c, em, 0.5);
-      wing.position.set(x, 0.4, -0.15);
-      wing.rotation.z = x < 0 ? 0.4 : -0.4;
+    const tailSpark = makeSphere(0.08, '#FF8C00', em, 1.0);
+    tailSpark.position.set(0, -0.25, -1.65);
+    g.add(tailSpark);
+    // 小翼（丸い膜）
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      const wing = makeEllipsoid(0.08, 0.35, 0.3, c, em, 0.5);
+      wing.position.set(side*0.85, 0.35, -0.1);
+      wing.rotation.z = side*0.4;
       g.add(wing);
     });
+
   } else if (attr === 'ice') {
-    // 氷：結晶の耳 + つるつるの尻尾 + 雪結晶パーツ
-    [[-0.55, 2.3, 0], [0.55, 2.3, 0]].forEach(([x, y, z]) => {
-      const ear = makeBox(0.12, 0.5, 0.12, c, em, 0.9);
+    // 氷：結晶の耳 + つるつる尻尾
+    [[-0.45, 2.1, 0], [0.45, 2.1, 0]].forEach(([x, y, z]) => {
+      const ear = makeCone(0.08, 0.45, c, em, 0.9);
       ear.position.set(x, y, z);
       ear.rotation.z = x < 0 ? 0.3 : -0.3;
       g.add(ear);
-      const earTip = makeBox(0.08, 0.2, 0.08, '#ffffff', '#aaddff', 1.0);
-      earTip.position.set(x + (x<0 ? -0.1 : 0.1), y + 0.3, z);
+      const earTip = makeSphere(0.05, '#ffffff', '#aaddff', 1.0);
+      earTip.position.set(x + (x<0 ? -0.06 : 0.06), y + 0.22, z);
       g.add(earTip);
     });
-    // なめらか尻尾
-    const tail1 = makeBox(0.5, 0.45, 0.45, bodyColor, em, 0.1);
-    tail1.position.set(0, -0.4, -0.9);
+    // 額の結晶
+    const gem = makeEllipsoid(0.08, 0.1, 0.06, '#ffffff', '#aaddff', 1.0);
+    gem.position.set(0, 1.7, 0.82);
+    gem.rotation.z = 0.78;
+    g.add(gem);
+    // つるつる尻尾
+    const tail1 = makeSphere(0.28, bodyColor, em, 0.1);
+    tail1.position.set(0, -0.3, -0.85);
     g.add(tail1);
-    const tail2 = makeBox(0.35, 0.35, 0.35, bodyColor, em, 0.1);
-    tail2.position.set(0, -0.65, -1.4);
+    const tail2 = makeSphere(0.2, bodyColor, em, 0.1);
+    tail2.position.set(0, -0.5, -1.2);
     g.add(tail2);
-    const tailCrystal = makeBox(0.2, 0.3, 0.15, c, em, 1.0);
-    tailCrystal.position.set(0, -0.6, -1.75);
+    const tailCrystal = makeEllipsoid(0.1, 0.18, 0.08, c, em, 1.0);
+    tailCrystal.position.set(0, -0.45, -1.5);
     tailCrystal.rotation.z = 0.78;
     g.add(tailCrystal);
-    // 小さな翼（氷の結晶風）
-    [[-1.1, 0], [1.1, 0]].forEach(([x]) => {
-      const wing = makeBox(0.1, 0.7, 0.5, c, em, 0.6);
-      wing.position.set(x, 0.5, -0.1);
-      wing.rotation.z = x < 0 ? 0.5 : -0.5;
+    // 透明感のある羽（薄い楕円）
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      const wing = makeEllipsoid(0.06, 0.4, 0.28, c, em, 0.4);
+      wing.position.set(side*0.9, 0.4, -0.08);
+      wing.rotation.z = side*0.5;
       g.add(wing);
-      const wingTip = makeBox(0.06, 0.3, 0.15, '#ffffff', '#aaddff', 1.0);
-      wingTip.position.set(x + (x<0 ? -0.3 : 0.3), 0.9, -0.1);
-      wing.rotation.z = x < 0 ? 0.5 : -0.5;
+      const wingTip = makeSphere(0.04, '#ffffff', '#aaddff', 0.9);
+      wingTip.position.set(side*1.15, 0.7, -0.08);
       g.add(wingTip);
     });
+
   } else if (attr === 'thunder') {
-    // 雷：ギザ耳 + 稲妻模様 + 電気尻尾
-    [[-0.5, 2.2, 0.1], [0.5, 2.2, 0.1]].forEach(([x, y, z]) => {
-      const ear = makeBox(0.2, 0.6, 0.15, c, em, 0.8);
+    // 雷：ギザ耳（コーン）+ 稲妻マーク + 電気尻尾
+    [[-0.4, 2.1, 0.1], [0.4, 2.1, 0.1]].forEach(([x, y, z]) => {
+      const ear = makeCone(0.1, 0.5, c, em, 0.9);
       ear.position.set(x, y, z);
       ear.rotation.z = x < 0 ? 0.2 : -0.2;
       g.add(ear);
     });
-    // 稲妻ほっぺマーク
-    [[-0.8, 1.25], [0.8, 1.25]].forEach(([x, y]) => {
-      const bolt = makeBox(0.12, 0.2, 0.08, c, em, 1.0);
-      bolt.position.set(x, y, 0.78);
-      bolt.rotation.z = 0.4;
+    // 稲妻ほっぺマーク（小さなコーン×2）
+    [[-0.65, 1.05], [0.65, 1.05]].forEach(([x, y]) => {
+      const bolt = makeCone(0.04, 0.18, c, em, 1.0);
+      bolt.position.set(x, y, 0.72);
+      bolt.rotation.z = 0.5;
       g.add(bolt);
+      const bolt2 = makeCone(0.03, 0.12, c, em, 1.0);
+      bolt2.position.set(x, y-0.1, 0.75);
+      bolt2.rotation.z = -0.5;
+      g.add(bolt2);
     });
-    // 電気尻尾（ジグザグ）
-    const tailParts = [
-      { p: [0, -0.4, -0.9], s: [0.45, 0.4, 0.35] },
-      { p: [0.2, -0.6, -1.3], s: [0.3, 0.3, 0.3] },
-      { p: [-0.1, -0.8, -1.65], s: [0.25, 0.25, 0.25] },
-    ];
-    tailParts.forEach(({p, s}) => {
-      const seg = makeBox(s[0], s[1], s[2], bodyColor, em, 0.1);
-      seg.position.set(...p);
-      g.add(seg);
-    });
-    const tailBolt = makeBox(0.15, 0.35, 0.12, c, em, 1.0);
-    tailBolt.position.set(0.1, -0.7, -1.95);
-    tailBolt.rotation.z = 0.5;
+    // ジグザグ尻尾
+    const tail1 = makeSphere(0.25, bodyColor, em, 0.1);
+    tail1.position.set(0, -0.3, -0.85);
+    g.add(tail1);
+    const tail2 = makeSphere(0.18, bodyColor, em, 0.1);
+    tail2.position.set(0.15, -0.45, -1.2);
+    g.add(tail2);
+    const tail3 = makeSphere(0.13, bodyColor, em, 0.1);
+    tail3.position.set(-0.08, -0.55, -1.5);
+    g.add(tail3);
+    const tailBolt = makeCone(0.06, 0.25, c, em, 1.0);
+    tailBolt.position.set(0.1, -0.5, -1.75);
+    tailBolt.rotation.z = 0.6;
     g.add(tailBolt);
-    // 小翼（鋭角）
-    [[-1.1, 0], [1.1, 0]].forEach(([x]) => {
-      const wing = makeBox(0.1, 0.5, 0.65, c, em, 0.5);
-      wing.position.set(x, 0.35, -0.15);
-      wing.rotation.z = x < 0 ? 0.35 : -0.35;
+    // 鋭い小翼
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      const wing = makeEllipsoid(0.06, 0.3, 0.35, c, em, 0.5);
+      wing.position.set(side*0.85, 0.3, -0.12);
+      wing.rotation.z = side*0.35;
       g.add(wing);
     });
+
   } else {
-    // 闇：浮遊角 + 影の尻尾 + 光る目の強調
-    [[-0.35, 2.35, 0.1], [0.35, 2.35, 0.1]].forEach(([x, y, z]) => {
-      const horn = makeBox(0.1, 0.55, 0.1, c, em, 0.9);
+    // 闇：浮遊角（コーン）+ 光る目 + 影の翼
+    [[-0.3, 2.15, 0.1], [0.3, 2.15, 0.1]].forEach(([x, y, z]) => {
+      const horn = makeCone(0.06, 0.45, c, em, 0.9);
       horn.position.set(x, y, z);
       horn.rotation.z = x < 0 ? -0.2 : 0.2;
       horn.rotation.x = -0.2;
       g.add(horn);
     });
-    // 影の翼（広め）
-    [[-1.15, 0], [1.15, 0]].forEach(([x]) => {
-      const wing = makeBox(0.1, 0.7, 0.8, c, em, 0.4);
-      wing.position.set(x, 0.4, -0.2);
-      wing.rotation.z = x < 0 ? 0.45 : -0.45;
+    // 影の翼（広めの楕円）
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      const wing = makeEllipsoid(0.06, 0.4, 0.42, c, em, 0.35);
+      wing.position.set(side*0.95, 0.35, -0.15);
+      wing.rotation.z = side*0.45;
       g.add(wing);
-      const wingInner = makeBox(0.06, 0.4, 0.5, bodyColor, em, 0.05);
-      wingInner.position.set(x + (x<0 ? -0.15 : 0.15), 0.2, -0.15);
-      wing.rotation.z = x < 0 ? 0.45 : -0.45;
+      const wingInner = makeEllipsoid(0.03, 0.22, 0.28, bodyColor, em, 0.05);
+      wingInner.position.set(side*1.05, 0.25, -0.12);
+      wing.rotation.z = side*0.45;
       g.add(wingInner);
     });
-    // 影尻尾（幽霊みたいに先端が透ける）
-    const tail1 = makeBox(0.5, 0.45, 0.45, bodyColor, em, 0.1);
-    tail1.position.set(0, -0.4, -0.9);
+    // 影尻尾（徐々にフェード）
+    const tail1 = makeSphere(0.28, bodyColor, em, 0.1);
+    tail1.position.set(0, -0.3, -0.85);
     g.add(tail1);
-    const tail2 = makeBox(0.35, 0.35, 0.35, bodyColor, em, 0.1);
-    tail2.position.set(0, -0.7, -1.4);
+    const tail2 = makeSphere(0.2, bodyColor, em, 0.1);
+    tail2.position.set(0, -0.5, -1.2);
     g.add(tail2);
-    const tailGlow = makeBox(0.25, 0.25, 0.25, c, em, 1.0);
-    tailGlow.position.set(0, -0.9, -1.8);
+    const tailGlow = makeSphere(0.14, c, em, 1.0);
+    tailGlow.position.set(0, -0.65, -1.55);
     g.add(tailGlow);
-    // 第三の目（おでこ）
-    const thirdEye = makeBox(0.15, 0.15, 0.1, c, em, 1.2);
-    thirdEye.position.set(0, 1.85, 0.82);
+    // 第三の目（おでこの球）
+    const thirdEye = makeSphere(0.08, c, em, 1.3);
+    thirdEye.position.set(0, 1.7, 0.82);
     g.add(thirdEye);
   }
 
@@ -728,7 +782,7 @@ function buildBabyDragon(attr) {
   return g;
 }
 
-// 成体：属性別デザイン＋育成タイプ装飾
+// 成体：スムーズ＆かっこいいドラゴン（属性別＋育成タイプ装飾）
 function buildAdultDragon(attr) {
   const g = new THREE.Group();
   const c  = ATTR[attr].color;
@@ -738,338 +792,353 @@ function buildAdultDragon(attr) {
 
   // === 属性別の体型パラメータ ===
   const shapes = {
-    fire:    { bodyW: 2.6, bodyH: 1.3, bodyD: 1.7, neckH: 1.5, headW: 1.1, headH: 1.0, headD: 1.5, hornH: 0.8 },
-    ice:     { bodyW: 2.4, bodyH: 1.5, bodyD: 2.0, neckH: 1.2, headW: 1.2, headH: 1.0, headD: 1.3, hornH: 0.6 },
-    thunder: { bodyW: 2.2, bodyH: 1.0, bodyD: 1.5, neckH: 1.6, headW: 0.9, headH: 0.8, headD: 1.5, hornH: 0.5 },
-    dark:    { bodyW: 2.5, bodyH: 1.2, bodyD: 1.8, neckH: 1.4, headW: 1.0, headH: 0.9, headD: 1.4, hornH: 0.9 },
+    fire:    { bRx:1.35, bRy:0.7, bRz:0.9, nR:0.3, nH:1.4, hRx:0.55, hRy:0.5, hRz:0.75, hornH:0.8 },
+    ice:     { bRx:1.25, bRy:0.8, bRz:1.0, nR:0.28, nH:1.2, hRx:0.6, hRy:0.5, hRz:0.65, hornH:0.65 },
+    thunder: { bRx:1.15, bRy:0.55, bRz:0.8, nR:0.25, nH:1.5, hRx:0.45, hRy:0.4, hRz:0.75, hornH:0.55 },
+    dark:    { bRx:1.3, bRy:0.65, bRz:0.9, nR:0.28, nH:1.3, hRx:0.5, hRy:0.45, hRz:0.7, hornH:0.9 },
   };
   const s = shapes[attr];
 
   // === 共通ベースボディ ===
-  const body = makeBox(s.bodyW, s.bodyH, s.bodyD, bodyColor, em, 0.2);
+  // 体（滑らかな楕円体）
+  const body = makeEllipsoid(s.bRx, s.bRy, s.bRz, bodyColor, em, 0.2);
   g.add(body);
 
-  const neck = makeBox(0.8, s.neckH, 0.8, bodyColor, em, 0.2);
-  neck.position.set(0, 1.0, 0.5);
+  // 腹（明るめ）
+  const belly = makeEllipsoid(s.bRx*0.7, s.bRy*0.6, s.bRz*0.5, '#1a2a1a', em, 0.1);
+  belly.position.set(0, -0.15, 0.3);
+  g.add(belly);
+
+  // 首（シリンダー → 少し前傾）
+  const neck = makeCylinder(s.nR*0.8, s.nR, s.nH, bodyColor, em, 0.2);
+  neck.position.set(0, 0.85, 0.45);
   neck.rotation.x = -0.3;
   g.add(neck);
 
-  const head = makeBox(s.headW, s.headH, s.headD, bodyColor, em, 0.2);
-  head.position.set(0, 1.9, 1.0);
+  // 頭（楕円体、前方に長い → 威厳）
+  const head = makeEllipsoid(s.hRx, s.hRy, s.hRz, bodyColor, em, 0.2);
+  head.position.set(0, 1.75, 0.95);
   g.add(head);
 
-  // 目
-  const eyeSize = attr === 'thunder' ? [0.2, 0.10] : attr === 'ice' ? [0.24, 0.18] : [0.22, 0.15];
-  [[-0.28, 0], [0.28, 0]].forEach(([x]) => {
-    const eye = makeBox(eyeSize[0], eyeSize[1], 0.12, c, em, 1.2);
-    eye.position.set(x, 1.92, 1.65);
+  // マズル（snout）
+  const snout = makeEllipsoid(s.hRx*0.55, s.hRy*0.45, s.hRz*0.5, bodyColor, em, 0.2);
+  snout.position.set(0, 1.55, 1.45);
+  g.add(snout);
+
+  // 目（鋭い楕円）
+  const eyeW = attr === 'thunder' ? 0.07 : 0.09;
+  const eyeH = attr === 'thunder' ? 0.04 : attr === 'ice' ? 0.08 : 0.06;
+  [[-0.24, 0], [0.24, 0]].forEach(([x]) => {
+    const eyeGlow = makeEllipsoid(eyeW+0.02, eyeH+0.02, 0.04, c, em, 0.6);
+    eyeGlow.position.set(x, 1.78, 1.5);
+    g.add(eyeGlow);
+    const eye = makeEllipsoid(eyeW, eyeH, 0.03, '#ffffff', c, 1.2);
+    eye.position.set(x, 1.78, 1.53);
     g.add(eye);
   });
 
   // 鼻孔
-  [[-0.15, 0], [0.15, 0]].forEach(([x]) => {
-    const nostril = makeBox(0.1, 0.08, 0.1, c, em, 0.6);
-    nostril.position.set(x, 1.65, 1.72);
+  [[-0.1, 0], [0.1, 0]].forEach(([x]) => {
+    const nostril = makeSphere(0.04, c, em, 0.6);
+    nostril.position.set(x, 1.5, 1.7);
     g.add(nostril);
   });
 
-  // 足（共通ベース）
-  const legPositions = [[-0.9,-0.85,0.6],[0.9,-0.85,0.6],[-0.8,-0.85,-0.7],[0.8,-0.85,-0.7]];
+  // 足（シリンダー＋爪）
+  const legPositions = [[-0.75,-0.8,0.5],[0.75,-0.8,0.5],[-0.65,-0.8,-0.55],[0.65,-0.8,-0.55]];
   legPositions.forEach(([x,y,z]) => {
-    const leg = makeBox(0.4, 0.8, 0.4, bodyColor, em, 0.15);
+    const leg = makeCylinder(0.18, 0.22, 0.7, bodyColor, em, 0.15);
     leg.position.set(x, y, z);
     g.add(leg);
-    const claw = makeBox(0.45, 0.15, 0.5, c, em, 0.5);
-    claw.position.set(x, y-0.46, z+0.1);
-    g.add(claw);
+    // 足先（球）
+    const foot = makeEllipsoid(0.25, 0.1, 0.28, bodyColor, em, 0.15);
+    foot.position.set(x, y-0.4, z+0.06);
+    g.add(foot);
+    // 爪（3本のコーン）
+    for (let ci = -1; ci <= 1; ci++) {
+      const claw = makeCone(0.04, 0.18, c, em, 0.7);
+      claw.position.set(x+ci*0.08, y-0.48, z+0.18);
+      claw.rotation.x = 0.5;
+      g.add(claw);
+    }
   });
 
   // === 属性別固有パーツ ===
   if (attr === 'fire') {
-    // 炎ドラゴン：大きな角、炎のような翼、燃える尻尾
-    [[-0.25, 2.5, 0.6], [0.25, 2.5, 0.6]].forEach(([x,y,z]) => {
-      const horn = makeBox(0.14, s.hornH, 0.14, c, em, 0.9);
+    // 角（大きくカーブ、コーン）
+    [[-0.2, 2.2, 0.6], [0.2, 2.2, 0.6]].forEach(([x,y,z]) => {
+      const horn = makeCone(0.08, s.hornH, c, em, 0.9);
       horn.position.set(x, y, z);
-      horn.rotation.x = -0.35;
+      horn.rotation.x = -0.4;
       horn.rotation.z = x < 0 ? -0.15 : 0.15;
       g.add(horn);
     });
-    // 炎翼（ゴツゴツ、赤〜オレンジ）
+    // 炎翼（骨＝シリンダー + 膜＝薄い楕円）
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingBase = makeBox(0.22, 1.3, 2.0, c, em, 0.5);
-      wingBase.position.set(side*1.8, 0.8, -0.3);
-      wingBase.rotation.z = side*0.5;
-      wingBase.rotation.x = 0.15;
-      g.add(wingBase);
-      const wingTip = makeBox(0.14, 0.8, 1.3, '#FF8C00', em, 0.7);
-      wingTip.position.set(side*2.9, 1.6, -0.5);
-      wingTip.rotation.z = side*0.9;
-      g.add(wingTip);
-      // 炎の翼膜
-      for (let j = 0; j < 4; j++) {
-        const mem = makeBox(0.08, 0.5 - j*0.08, 0.35, j < 2 ? c : '#FF8C00', em, 0.3 + j*0.15);
-        mem.position.set(side*(2.1+j*0.35), 0.5-j*0.1, -0.2-j*0.08);
-        mem.rotation.z = side*(0.6+j*0.2);
+      // 翼の骨
+      const wingBone1 = makeCylinder(0.06, 0.04, 1.8, c, em, 0.5);
+      wingBone1.position.set(side*1.2, 0.9, -0.2);
+      wingBone1.rotation.z = side*0.7;
+      wingBone1.rotation.x = 0.15;
+      g.add(wingBone1);
+      const wingBone2 = makeCylinder(0.04, 0.03, 1.3, '#FF8C00', em, 0.6);
+      wingBone2.position.set(side*2.3, 1.7, -0.4);
+      wingBone2.rotation.z = side*1.0;
+      g.add(wingBone2);
+      // 翼膜（楕円の薄板）
+      for (let j = 0; j < 3; j++) {
+        const mem = makeEllipsoid(0.03, 0.35-j*0.06, 0.5-j*0.08, j<2 ? c : '#FF8C00', em, 0.3+j*0.15);
+        mem.position.set(side*(1.6+j*0.35), 0.65-j*0.08, -0.2-j*0.06);
+        mem.rotation.z = side*(0.5+j*0.2);
         g.add(mem);
       }
+      // 翼先端の炎
+      const wingFlame = makeSphere(0.1, '#FF8C00', em, 1.0);
+      wingFlame.position.set(side*2.8, 2.1, -0.5);
+      g.add(wingFlame);
     });
-    // 燃える尻尾
-    const tailData = [
-      { p: [0,-0.4,-1.3], s: [0.8,0.7,0.7] },
-      { p: [0,-0.7,-2.1], s: [0.6,0.55,0.55] },
-      { p: [0.2,-1.0,-2.7], s: [0.45,0.4,0.4] },
-    ];
-    tailData.forEach(({p,s: sz}) => {
-      const seg = makeBox(sz[0],sz[1],sz[2], bodyColor, em, 0.15);
+    // 尻尾（球のチェーン → 炎）
+    const tailData = [{r:0.35,p:[0,-0.35,-1.1]},{r:0.28,p:[0,-0.55,-1.7]},{r:0.22,p:[0.15,-0.75,-2.3]},{r:0.16,p:[0.3,-0.9,-2.8]}];
+    tailData.forEach(({r,p}) => {
+      const seg = makeSphere(r, bodyColor, em, 0.15);
       seg.position.set(...p);
       g.add(seg);
     });
-    // 尻尾の炎
-    const tailFlame1 = makeBox(0.3, 0.5, 0.3, c, em, 0.9);
-    tailFlame1.position.set(0.3, -1.1, -3.1);
+    const tailFlame1 = makeEllipsoid(0.18, 0.3, 0.15, c, em, 0.9);
+    tailFlame1.position.set(0.4, -0.85, -3.1);
     g.add(tailFlame1);
-    const tailFlame2 = makeBox(0.2, 0.35, 0.2, '#FF8C00', em, 1.0);
-    tailFlame2.position.set(0.35, -0.9, -3.3);
+    const tailFlame2 = makeSphere(0.1, '#FF8C00', em, 1.0);
+    tailFlame2.position.set(0.45, -0.75, -3.25);
     g.add(tailFlame2);
-    // 背びれ（炎っぽく不規則）
+    // 背びれ（コーンを不規則に）
     for (let i = 0; i < 6; i++) {
-      const h = 0.3 + (i%2)*0.25 + i*0.04;
-      const spine = makeBox(0.12, h, 0.12, i%2 === 0 ? c : '#FF8C00', em, 0.7);
-      spine.position.set(0, 0.7+i*0.03, -0.4+i*0.25);
+      const h = 0.25 + (i%2)*0.2 + i*0.03;
+      const spine = makeCone(0.06, h, i%2===0 ? c : '#FF8C00', em, 0.7);
+      spine.position.set(0, 0.7+i*0.02, -0.3+i*0.22);
       g.add(spine);
     }
 
   } else if (attr === 'ice') {
-    // 氷ドラゴン：結晶の角、透明感のある翼、氷の装甲
-    [[-0.3, 2.4, 0.5], [0.3, 2.4, 0.5]].forEach(([x,y,z]) => {
-      const horn = makeBox(0.1, s.hornH, 0.1, '#ffffff', '#aaddff', 1.0);
+    // 結晶角（コーン + 枝分かれ）
+    [[-0.25, 2.15, 0.5], [0.25, 2.15, 0.5]].forEach(([x,y,z]) => {
+      const horn = makeCone(0.06, s.hornH, '#ffffff', '#aaddff', 1.0);
       horn.position.set(x, y, z);
       horn.rotation.z = x<0 ? -0.25 : 0.25;
       horn.rotation.x = -0.2;
       g.add(horn);
-      // 結晶の枝分かれ
-      const branch = makeBox(0.06, 0.3, 0.06, c, em, 0.8);
-      branch.position.set(x+(x<0?-0.15:0.15), y+0.1, z);
+      const branch = makeCone(0.035, 0.3, c, em, 0.8);
+      branch.position.set(x+(x<0?-0.12:0.12), y+0.05, z);
       branch.rotation.z = x<0 ? -0.6 : 0.6;
       g.add(branch);
     });
-    // 氷の額飾り
-    const crown = makeBox(0.5, 0.15, 0.15, c, em, 0.9);
-    crown.position.set(0, 2.15, 1.1);
+    // 額飾りの結晶
+    const crown = makeEllipsoid(0.25, 0.08, 0.08, c, em, 0.9);
+    crown.position.set(0, 2.0, 1.05);
     g.add(crown);
     // 翼（結晶的・透明感）
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingBase = makeBox(0.18, 1.4, 1.8, c, em, 0.35);
-      wingBase.position.set(side*1.7, 0.9, -0.2);
-      wingBase.rotation.z = side*0.45;
-      g.add(wingBase);
-      const wingTip = makeBox(0.1, 0.9, 1.2, '#ffffff', '#aaddff', 0.8);
-      wingTip.position.set(side*2.7, 1.7, -0.4);
-      wingTip.rotation.z = side*0.85;
-      g.add(wingTip);
-      // 氷結晶の翼膜
+      const wingBone = makeCylinder(0.05, 0.03, 1.6, c, em, 0.4);
+      wingBone.position.set(side*1.15, 0.85, -0.15);
+      wingBone.rotation.z = side*0.55;
+      g.add(wingBone);
+      const wingBone2 = makeCylinder(0.03, 0.02, 1.1, '#ffffff', '#aaddff', 0.7);
+      wingBone2.position.set(side*2.2, 1.6, -0.35);
+      wingBone2.rotation.z = side*0.9;
+      g.add(wingBone2);
       for (let j = 0; j < 3; j++) {
-        const mem = makeBox(0.06, 0.6-j*0.12, 0.3, '#ffffff', '#aaddff', 0.5+j*0.2);
-        mem.position.set(side*(2.0+j*0.35), 0.6-j*0.08, -0.15-j*0.1);
-        mem.rotation.z = side*(0.5+j*0.2);
+        const mem = makeEllipsoid(0.025, 0.38-j*0.08, 0.35-j*0.05, '#ffffff', '#aaddff', 0.35+j*0.15);
+        mem.position.set(side*(1.5+j*0.35), 0.6-j*0.06, -0.12-j*0.08);
+        mem.rotation.z = side*(0.45+j*0.2);
         g.add(mem);
       }
+      // 翼先端の結晶
+      const wingCrystal = makeSphere(0.06, '#ffffff', '#aaddff', 1.0);
+      wingCrystal.position.set(side*2.6, 2.0, -0.4);
+      g.add(wingCrystal);
     });
-    // 氷の装甲（体の両側）
-    [[-1.3, 0.1], [1.3, 0.1]].forEach(([x, y]) => {
-      const armor = makeBox(0.12, 0.5, 0.8, c, em, 0.5);
-      armor.position.set(x, y, 0);
+    // 氷の装甲（体の両側、楕円板）
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      const armor = makeEllipsoid(0.06, 0.25, 0.4, c, em, 0.5);
+      armor.position.set(side*1.2, 0.05, 0);
       g.add(armor);
     });
-    // 尻尾（なめらか＋氷の先端）
-    const tailData = [
-      { p: [0,-0.4,-1.3], s: [0.7,0.65,0.65] },
-      { p: [0,-0.6,-2.0], s: [0.55,0.5,0.5] },
-      { p: [0,-0.8,-2.6], s: [0.4,0.4,0.4] },
-    ];
-    tailData.forEach(({p,s: sz}) => {
-      const seg = makeBox(sz[0],sz[1],sz[2], bodyColor, em, 0.15);
+    // 尻尾（なめらか球チェーン + 結晶先端）
+    const tailData = [{r:0.32,p:[0,-0.35,-1.1]},{r:0.25,p:[0,-0.5,-1.7]},{r:0.18,p:[0,-0.65,-2.2]},{r:0.13,p:[0,-0.75,-2.65]}];
+    tailData.forEach(({r,p}) => {
+      const seg = makeSphere(r, bodyColor, em, 0.15);
       seg.position.set(...p);
       g.add(seg);
     });
-    const tailCrystal = makeBox(0.25, 0.4, 0.2, c, em, 1.0);
-    tailCrystal.position.set(0, -0.8, -2.95);
+    const tailCrystal = makeEllipsoid(0.12, 0.2, 0.08, c, em, 1.0);
+    tailCrystal.position.set(0, -0.72, -2.9);
     tailCrystal.rotation.z = 0.78;
     g.add(tailCrystal);
-    // 背びれ（結晶風・均等）
+    // 背びれ（結晶コーン）
     for (let i = 0; i < 5; i++) {
-      const spine = makeBox(0.08, 0.35+i*0.05, 0.08, i%2===0 ? c : '#ffffff', '#aaddff', 0.8);
-      spine.position.set(0, 0.8+i*0.02, -0.3+i*0.3);
+      const spine = makeCone(0.04, 0.3+i*0.04, i%2===0 ? c : '#ffffff', '#aaddff', 0.8);
+      spine.position.set(0, 0.8+i*0.02, -0.25+i*0.25);
       spine.rotation.z = (i%2-0.5)*0.15;
       g.add(spine);
     }
 
   } else if (attr === 'thunder') {
-    // 雷ドラゴン：シャープ＆スリム、稲妻角、鋭い翼
-    [[-0.2, 2.45, 0.7], [0.2, 2.45, 0.7]].forEach(([x,y,z]) => {
-      const horn = makeBox(0.08, s.hornH, 0.08, c, em, 1.0);
+    // 雷角（シャープなコーン）
+    [[-0.16, 2.15, 0.65], [0.16, 2.15, 0.65]].forEach(([x,y,z]) => {
+      const horn = makeCone(0.05, s.hornH, c, em, 1.0);
       horn.position.set(x, y, z);
       horn.rotation.x = -0.4;
       g.add(horn);
     });
-    // 稲妻模様（頭の側面）
-    [[-0.45, 1.9, 1.2], [0.45, 1.9, 1.2]].forEach(([x,y,z]) => {
-      const bolt = makeBox(0.06, 0.2, 0.06, c, em, 1.0);
+    // 稲妻模様（頬のコーン）
+    [[-0.35, 1.72, 1.2], [0.35, 1.72, 1.2]].forEach(([x,y,z]) => {
+      const bolt = makeCone(0.025, 0.18, c, em, 1.0);
       bolt.position.set(x, y, z);
       bolt.rotation.z = 0.5;
       g.add(bolt);
-      const bolt2 = makeBox(0.06, 0.15, 0.06, c, em, 1.0);
-      bolt2.position.set(x, y-0.15, z+0.05);
+      const bolt2 = makeCone(0.02, 0.13, c, em, 1.0);
+      bolt2.position.set(x, y-0.12, z+0.04);
       bolt2.rotation.z = -0.5;
       g.add(bolt2);
     });
-    // 鋭い翼（長くてシャープ）
+    // 翼（シャープ＆長い）
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingBase = makeBox(0.15, 1.0, 2.2, c, em, 0.45);
-      wingBase.position.set(side*1.6, 0.7, -0.3);
-      wingBase.rotation.z = side*0.55;
-      wingBase.rotation.x = 0.1;
-      g.add(wingBase);
-      const wingTip = makeBox(0.1, 0.6, 1.6, c, em, 0.7);
-      wingTip.position.set(side*2.8, 1.5, -0.6);
-      wingTip.rotation.z = side*1.0;
-      g.add(wingTip);
-      // 翼の稲妻模様
+      const wingBone = makeCylinder(0.045, 0.03, 2.0, c, em, 0.5);
+      wingBone.position.set(side*1.1, 0.7, -0.2);
+      wingBone.rotation.z = side*0.6;
+      wingBone.rotation.x = 0.1;
+      g.add(wingBone);
+      const wingBone2 = makeCylinder(0.03, 0.02, 1.5, c, em, 0.7);
+      wingBone2.position.set(side*2.4, 1.5, -0.5);
+      wingBone2.rotation.z = side*1.0;
+      g.add(wingBone2);
       for (let j = 0; j < 2; j++) {
-        const bolt = makeBox(0.05, 0.4, 0.05, '#ffffff', c, 1.0);
-        bolt.position.set(side*(2.0+j*0.5), 0.9-j*0.2, -0.3-j*0.15);
-        bolt.rotation.z = side*(0.7+j*0.2);
-        g.add(bolt);
+        const mem = makeEllipsoid(0.02, 0.3-j*0.05, 0.5-j*0.1, c, em, 0.3+j*0.2);
+        mem.position.set(side*(1.5+j*0.5), 0.6-j*0.15, -0.25-j*0.1);
+        mem.rotation.z = side*(0.5+j*0.25);
+        g.add(mem);
       }
+      // 稲妻エフェクト線
+      const boltLine = makeCylinder(0.015, 0.015, 0.5, '#ffffff', c, 1.0);
+      boltLine.position.set(side*1.8, 0.8, -0.3);
+      boltLine.rotation.z = side*0.8;
+      g.add(boltLine);
     });
-    // 電撃尻尾（ジグザグ）
-    const tailData = [
-      { p: [0,-0.3,-1.2], s: [0.6,0.5,0.5] },
-      { p: [0.25,-0.5,-1.8], s: [0.45,0.4,0.4] },
-      { p: [-0.15,-0.7,-2.3], s: [0.35,0.3,0.3] },
-      { p: [0.2,-0.85,-2.8], s: [0.25,0.25,0.25] },
-    ];
-    tailData.forEach(({p,s: sz}) => {
-      const seg = makeBox(sz[0],sz[1],sz[2], bodyColor, em, 0.15);
+    // ジグザグ尻尾
+    const tailData = [{r:0.28,p:[0,-0.25,-1.0]},{r:0.22,p:[0.18,-0.4,-1.5]},{r:0.16,p:[-0.1,-0.55,-2.0]},{r:0.12,p:[0.12,-0.65,-2.4]},{r:0.08,p:[-0.05,-0.72,-2.75]}];
+    tailData.forEach(({r,p}) => {
+      const seg = makeSphere(r, bodyColor, em, 0.15);
       seg.position.set(...p);
       g.add(seg);
     });
-    const tailBolt = makeBox(0.15, 0.4, 0.12, c, em, 1.0);
-    tailBolt.position.set(0.1, -0.8, -3.1);
+    const tailBolt = makeCone(0.06, 0.3, c, em, 1.0);
+    tailBolt.position.set(0.05, -0.65, -3.0);
     tailBolt.rotation.z = 0.6;
     g.add(tailBolt);
-    // 背びれ（鋭く低め）
+    // 背びれ（鋭い低めコーン）
     for (let i = 0; i < 7; i++) {
-      const spine = makeBox(0.06, 0.2+Math.sin(i*0.8)*0.15, 0.06, c, em, 0.8);
-      spine.position.set(0, 0.55+i*0.02, -0.3+i*0.22);
+      const spine = makeCone(0.03, 0.18+Math.sin(i*0.8)*0.12, c, em, 0.8);
+      spine.position.set(0, 0.55+i*0.015, -0.25+i*0.18);
       g.add(spine);
     }
 
   } else {
-    // 闇ドラゴン：ミステリアス、大きな翼、光る紋様
-    [[-0.3, 2.55, 0.5], [0.3, 2.55, 0.5]].forEach(([x,y,z]) => {
-      const horn = makeBox(0.1, s.hornH, 0.1, c, em, 1.0);
+    // 闇：ミステリアス、大きな翼、光る紋様
+    // 角（長く先端が光る）
+    [[-0.22, 2.25, 0.5], [0.22, 2.25, 0.5]].forEach(([x,y,z]) => {
+      const horn = makeCone(0.06, s.hornH, c, em, 1.0);
       horn.position.set(x, y, z);
       horn.rotation.x = -0.25;
       horn.rotation.z = x<0 ? -0.2 : 0.2;
       g.add(horn);
-      // 角の先端が光る
-      const hornTip = makeBox(0.06, 0.15, 0.06, '#ffffff', c, 1.2);
-      hornTip.position.set(x+(x<0?-0.05:0.05), y+0.45, z-0.1);
+      const hornTip = makeSphere(0.04, '#ffffff', c, 1.3);
+      hornTip.position.set(x+(x<0?-0.04:0.04), y+0.42, z-0.08);
       g.add(hornTip);
     });
     // 第三の目
-    const thirdEye = makeBox(0.18, 0.18, 0.1, c, em, 1.3);
-    thirdEye.position.set(0, 2.15, 1.55);
+    const thirdEye = makeSphere(0.08, c, em, 1.3);
+    thirdEye.position.set(0, 2.0, 1.4);
     g.add(thirdEye);
-    // 紋様（体の側面に光るライン）
-    for (let i = 0; i < 3; i++) {
+    // 光る紋様（体の側面に小さな球を配列）
+    for (let i = 0; i < 4; i++) {
       [[-1, 0], [1, 0]].forEach(([side]) => {
-        const rune = makeBox(0.04, 0.15, 0.3, c, em, 0.8 + i*0.15);
-        rune.position.set(side*(s.bodyW/2+0.02), -0.1+i*0.25, -0.3+i*0.35);
+        const rune = makeSphere(0.04, c, em, 0.8+i*0.12);
+        rune.position.set(side*(s.bRx*0.85+0.02), -0.1+i*0.2, -0.2+i*0.3);
         g.add(rune);
       });
     }
-    // 闇の翼（大きく広がる）
+    // 大きな翼（骨＋広い膜）
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wingBase = makeBox(0.2, 1.5, 2.2, c, em, 0.3);
-      wingBase.position.set(side*1.9, 0.9, -0.3);
-      wingBase.rotation.z = side*0.45;
-      g.add(wingBase);
-      const wingTip = makeBox(0.14, 1.0, 1.6, c, em, 0.5);
-      wingTip.position.set(side*3.0, 1.8, -0.5);
-      wingTip.rotation.z = side*0.85;
-      g.add(wingTip);
-      // 暗い翼膜
+      const wingBone = makeCylinder(0.06, 0.04, 2.0, c, em, 0.35);
+      wingBone.position.set(side*1.3, 0.9, -0.2);
+      wingBone.rotation.z = side*0.5;
+      g.add(wingBone);
+      const wingBone2 = makeCylinder(0.04, 0.025, 1.5, c, em, 0.5);
+      wingBone2.position.set(side*2.6, 1.8, -0.45);
+      wingBone2.rotation.z = side*0.9;
+      g.add(wingBone2);
       for (let j = 0; j < 4; j++) {
-        const mem = makeBox(0.06, 0.6-j*0.08, 0.45-j*0.05, bodyColor, em, 0.02+j*0.02);
-        mem.position.set(side*(2.2+j*0.35), 0.6-j*0.1, -0.2-j*0.1);
-        mem.rotation.z = side*(0.5+j*0.18);
+        const mem = makeEllipsoid(0.025, 0.4-j*0.05, 0.5-j*0.06, bodyColor, em, 0.02+j*0.02);
+        mem.position.set(side*(1.7+j*0.35), 0.65-j*0.08, -0.18-j*0.08);
+        mem.rotation.z = side*(0.45+j*0.16);
         g.add(mem);
       }
     });
-    // 尻尾（長く影のよう）
-    const tailData = [
-      { p: [0,-0.4,-1.3], s: [0.7,0.6,0.6] },
-      { p: [0,-0.6,-2.1], s: [0.55,0.5,0.5] },
-      { p: [0.15,-0.8,-2.8], s: [0.4,0.4,0.4] },
-      { p: [0.3,-1.0,-3.4], s: [0.3,0.3,0.3] },
-    ];
-    tailData.forEach(({p,s: sz}) => {
-      const seg = makeBox(sz[0],sz[1],sz[2], bodyColor, em, 0.15);
+    // 長い尻尾
+    const tailData = [{r:0.32,p:[0,-0.35,-1.1]},{r:0.25,p:[0,-0.5,-1.75]},{r:0.18,p:[0.1,-0.65,-2.35]},{r:0.13,p:[0.2,-0.8,-2.9]},{r:0.09,p:[0.25,-0.9,-3.35]}];
+    tailData.forEach(({r,p}) => {
+      const seg = makeSphere(r, bodyColor, em, 0.15);
       seg.position.set(...p);
       g.add(seg);
     });
-    const tailGlow = makeBox(0.2, 0.35, 0.2, c, em, 1.0);
-    tailGlow.position.set(0.4, -1.1, -3.7);
+    const tailGlow = makeSphere(0.08, c, em, 1.0);
+    tailGlow.position.set(0.3, -0.92, -3.6);
     g.add(tailGlow);
-    // 背びれ（エーテル風）
+    // 背びれ（エーテル風コーン）
     for (let i = 0; i < 5; i++) {
-      const spine = makeBox(0.1, 0.4+i*0.08, 0.1, c, em, 0.5+i*0.1);
-      spine.position.set(0, 0.7+i*0.04, -0.3+i*0.3);
+      const spine = makeCone(0.05, 0.3+i*0.06, c, em, 0.5+i*0.1);
+      spine.position.set(0, 0.68+i*0.03, -0.25+i*0.25);
       g.add(spine);
     }
   }
 
   // === 育成タイプによる追加装飾 ===
   if (type === 'attacker') {
-    // アタッカー：爪が大きくなる + 牙
+    // アタッカー：大きな爪（コーン）+ 牙
     legPositions.forEach(([x,y,z]) => {
-      const bigClaw = makeBox(0.15, 0.2, 0.25, c, em, 0.9);
-      bigClaw.position.set(x, y-0.55, z+0.3);
+      const bigClaw = makeCone(0.06, 0.25, c, em, 0.9);
+      bigClaw.position.set(x, y-0.52, z+0.22);
+      bigClaw.rotation.x = 0.6;
       g.add(bigClaw);
     });
-    // 牙
-    [[-0.2, 1.52, 1.72], [0.2, 1.52, 1.72]].forEach(([x,y,z]) => {
-      const fang = makeBox(0.08, 0.2, 0.08, '#ffffff', '#ffffff', 0.8);
+    [[-0.14, 1.42, 1.62], [0.14, 1.42, 1.62]].forEach(([x,y,z]) => {
+      const fang = makeCone(0.035, 0.2, '#ffffff', '#ffffff', 0.8);
       fang.position.set(x, y, z);
+      fang.rotation.x = Math.PI;
       g.add(fang);
     });
   } else if (type === 'tank') {
-    // タンク：背中と肩に装甲プレート
+    // タンク：背中に丸い装甲プレート + 肩ガード
     for (let i = 0; i < 3; i++) {
-      const plate = makeBox(s.bodyW*0.35, 0.12, 0.6, c, em, 0.4);
-      plate.position.set(0, 0.7+i*0.05, -0.5+i*0.4);
+      const plate = makeEllipsoid(s.bRx*0.3, 0.08, 0.3, c, em, 0.4);
+      plate.position.set(0, 0.7+i*0.04, -0.4+i*0.35);
       g.add(plate);
     }
-    // 肩アーマー
-    [[-1.2, 0.4, 0.3], [1.2, 0.4, 0.3]].forEach(([x,y,z]) => {
-      const shoulder = makeBox(0.4, 0.35, 0.5, c, em, 0.45);
-      shoulder.position.set(x, y, z);
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      const shoulder = makeEllipsoid(0.22, 0.18, 0.25, c, em, 0.45);
+      shoulder.position.set(side*1.0, 0.3, 0.25);
       g.add(shoulder);
     });
   } else if (type === 'speedster') {
-    // スピード：翼にブースター風パーツ + 流線型ヒレ
+    // スピード：翼にブースター球 + 流線型ヒレ
     [[-1, 0], [1, 0]].forEach(([side]) => {
-      const booster = makeBox(0.15, 0.25, 0.6, c, em, 0.9);
-      booster.position.set(side*2.3, 0.3, -0.8);
+      const booster = makeEllipsoid(0.08, 0.12, 0.3, c, em, 0.9);
+      booster.position.set(side*1.9, 0.25, -0.7);
       booster.rotation.z = side*0.3;
       g.add(booster);
     });
-    // 流線型の横ヒレ
-    [[-1.35, -0.2, -0.5], [1.35, -0.2, -0.5]].forEach(([x,y,z]) => {
-      const fin = makeBox(0.5, 0.08, 0.7, c, em, 0.5);
-      fin.position.set(x, y, z);
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      const fin = makeEllipsoid(0.25, 0.04, 0.35, c, em, 0.5);
+      fin.position.set(side*1.1, -0.15, -0.4);
       g.add(fin);
     });
   }
@@ -1078,13 +1147,13 @@ function buildAdultDragon(attr) {
   return g;
 }
 
-// 属性ごとのエフェクトパーティクル
+// 属性ごとのエフェクトパーティクル（スムーズ球）
 function addAttrEffect(group, attr, stage) {
   const c = hexToThreeColor(ATTR[attr].color);
   const count = stage === 'adult' ? 30 : 20;
   for (let i = 0; i < count; i++) {
-    const size = 0.06 + Math.random() * 0.08;
-    const geo = new THREE.BoxGeometry(size, size, size);
+    const size = 0.04 + Math.random() * 0.06;
+    const geo = new THREE.SphereGeometry(size, 8, 6);
     const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending });
     const mesh = new THREE.Mesh(geo, mat);
     const angle = Math.random() * Math.PI * 2;
