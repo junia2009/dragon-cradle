@@ -818,51 +818,51 @@ function buildAdultDragon(attr) {
   const bc2 = '#1a2a1a';
   const type = state ? state.dragonType : 'balanced';
 
-  // === 属性別の体型パラメータ ===
+  // === 属性別の体型パラメータ（スリム＆引き締め） ===
   const shapes = {
-    fire:    { bRx:1.4, bRy:0.75, bRz:0.95, nR:0.32, nH:1.5, hRx:0.58, hRy:0.52, hRz:0.8, hornH:0.9 },
-    ice:     { bRx:1.3, bRy:0.85, bRz:1.05, nR:0.3,  nH:1.25, hRx:0.62, hRy:0.52, hRz:0.7, hornH:0.7 },
-    thunder: { bRx:1.2, bRy:0.6, bRz:0.85, nR:0.26, nH:1.55, hRx:0.48, hRy:0.42, hRz:0.8, hornH:0.6 },
-    dark:    { bRx:1.35, bRy:0.7, bRz:0.95, nR:0.3,  nH:1.35, hRx:0.53, hRy:0.48, hRz:0.75, hornH:1.0 },
+    fire:    { bRx:1.55, bRy:0.48, bRz:0.6, nR:0.28, nH:1.5, hRx:0.58, hRy:0.52, hRz:0.8, hornH:0.9 },
+    ice:     { bRx:1.45, bRy:0.55, bRz:0.68, nR:0.26, nH:1.25, hRx:0.62, hRy:0.52, hRz:0.7, hornH:0.7 },
+    thunder: { bRx:1.4, bRy:0.38, bRz:0.52, nR:0.22, nH:1.55, hRx:0.48, hRy:0.42, hRz:0.8, hornH:0.6 },
+    dark:    { bRx:1.5, bRy:0.45, bRz:0.6, nR:0.26, nH:1.35, hRx:0.53, hRy:0.48, hRz:0.75, hornH:1.0 },
   };
   const s = shapes[attr];
 
-  // === 共通ベースボディ ===
-  // 胴体（メイン楕円体）
+  // === 共通ベースボディ（引き締まった流線型） ===
+  // 胴体（前後に長く、高さと幅を絞った楕円体）
   const body = makeEllipsoid(s.bRx, s.bRy, s.bRz, bodyColor, em, 0.2);
   g.add(body);
-  // 胸板（前方にボリューム）
-  const chest = makeEllipsoid(s.bRx*0.75, s.bRy*0.8, s.bRz*0.55, bc2, em, 0.15);
-  chest.position.set(0, 0.1, 0.4);
+  // 胸板（前方に絞り込み）
+  const chest = makeEllipsoid(s.bRx*0.5, s.bRy*0.7, s.bRz*0.45, bc2, em, 0.15);
+  chest.position.set(0, 0.05, 0.5);
   g.add(chest);
-  // 腹（下部）
-  const belly = makeEllipsoid(s.bRx*0.65, s.bRy*0.5, s.bRz*0.45, bc2, em, 0.1);
-  belly.position.set(0, -0.2, 0.25);
+  // 腹（薄く平ら）
+  const belly = makeEllipsoid(s.bRx*0.55, s.bRy*0.3, s.bRz*0.35, bc2, em, 0.1);
+  belly.position.set(0, -0.18, 0.25);
   g.add(belly);
-  // 肩の盛り上がり
+  // 肩の盛り上がり（引き締め）
   [[-1, 0], [1, 0]].forEach(([side]) => {
-    const shoulderMuscle = makeEllipsoid(0.3, 0.25, 0.35, bodyColor, em, 0.18);
-    shoulderMuscle.position.set(side*0.75, 0.15, 0.35);
+    const shoulderMuscle = makeEllipsoid(0.22, 0.15, 0.3, bodyColor, em, 0.18);
+    shoulderMuscle.position.set(side*0.55, 0.12, 0.4);
     g.add(shoulderMuscle);
   });
-  // 腰（後方の膨らみ）
-  const hip = makeEllipsoid(s.bRx*0.8, s.bRy*0.65, s.bRz*0.6, bodyColor, em, 0.15);
-  hip.position.set(0, -0.1, -0.45);
+  // 腰（後方を絞る）
+  const hip = makeEllipsoid(s.bRx*0.6, s.bRy*0.45, s.bRz*0.45, bodyColor, em, 0.15);
+  hip.position.set(0, -0.08, -0.5);
   g.add(hip);
 
-  // 首（二重構造 → 太い付け根＋細い上部）
-  const neckBase = makeCylinder(s.nR*1.1, s.nR*0.9, s.nH*0.5, bodyColor, em, 0.2);
-  neckBase.position.set(0, 0.55, 0.5);
+  // 首（二重構造 → 引き締まった付け根＋細い上部）
+  const neckBase = makeCylinder(s.nR*0.95, s.nR*0.75, s.nH*0.5, bodyColor, em, 0.2);
+  neckBase.position.set(0, 0.42, 0.55);
   neckBase.rotation.x = -0.2;
   g.add(neckBase);
-  const neckUpper = makeCylinder(s.nR*0.85, s.nR*0.7, s.nH*0.6, bodyColor, em, 0.2);
-  neckUpper.position.set(0, 1.1, 0.7);
+  const neckUpper = makeCylinder(s.nR*0.7, s.nR*0.55, s.nH*0.6, bodyColor, em, 0.2);
+  neckUpper.position.set(0, 0.95, 0.75);
   neckUpper.rotation.x = -0.35;
   g.add(neckUpper);
   // 首の筋（左右）
   [[-1, 0], [1, 0]].forEach(([side]) => {
-    const neckMuscle = makeEllipsoid(0.08, 0.35, 0.12, bc2, em, 0.12);
-    neckMuscle.position.set(side*0.18, 0.8, 0.6);
+    const neckMuscle = makeEllipsoid(0.06, 0.28, 0.08, bc2, em, 0.12);
+    neckMuscle.position.set(side*0.14, 0.65, 0.65);
     neckMuscle.rotation.x = -0.3;
     g.add(neckMuscle);
   });
@@ -925,37 +925,37 @@ function buildAdultDragon(attr) {
     g.add(nostril);
   });
 
-  // 足（筋肉質：太もも＋すね＋足先＋爪）
-  const legPositions = [[-0.8,-0.55,0.5],[0.8,-0.55,0.5],[-0.7,-0.55,-0.5],[0.7,-0.55,-0.5]];
+  // 足（スリム＆引き締まり：太もも＋すね＋足先＋爪）
+  const legPositions = [[-0.5,-0.35,0.5],[0.5,-0.35,0.5],[-0.45,-0.35,-0.5],[0.45,-0.35,-0.5]];
   legPositions.forEach(([x,y,z], li) => {
     const isFront = li < 2;
     // 太もも
-    const thighR = isFront ? 0.2 : 0.22;
-    const thigh = makeCylinder(thighR+0.02, thighR, 0.5, bodyColor, em, 0.15);
+    const thighR = isFront ? 0.14 : 0.16;
+    const thigh = makeCylinder(thighR+0.02, thighR, 0.45, bodyColor, em, 0.15);
     thigh.position.set(x, y, z);
     g.add(thigh);
-    // 太もものふくらみ
-    const thighMuscle = makeEllipsoid(thighR+0.06, 0.2, thighR+0.04, bodyColor, em, 0.13);
+    // 太もものふくらみ（控えめ）
+    const thighMuscle = makeEllipsoid(thighR+0.03, 0.14, thighR+0.02, bodyColor, em, 0.13);
     thighMuscle.position.set(x, y+0.05, z);
     g.add(thighMuscle);
-    // すね
-    const shin = makeCylinder(thighR*0.8, thighR*0.65, 0.45, bodyColor, em, 0.15);
-    shin.position.set(x, y-0.48, z+0.02);
+    // すね（細め）
+    const shin = makeCylinder(thighR*0.7, thighR*0.5, 0.42, bodyColor, em, 0.15);
+    shin.position.set(x, y-0.45, z+0.02);
     g.add(shin);
-    // 足先
-    const foot = makeEllipsoid(0.24, 0.09, 0.3, bodyColor, em, 0.15);
-    foot.position.set(x, y-0.72, z+0.08);
+    // 足先（コンパクト）
+    const foot = makeEllipsoid(0.18, 0.07, 0.24, bodyColor, em, 0.15);
+    foot.position.set(x, y-0.68, z+0.08);
     g.add(foot);
     // 爪（4本のコーン）
     for (let ci = 0; ci < 4; ci++) {
       const claw = makeCone(0.035, 0.2, c, em, 0.7);
-      claw.position.set(x+(-0.09+ci*0.06), y-0.78, z+0.2);
+      claw.position.set(x+(-0.07+ci*0.05), y-0.74, z+0.2);
       claw.rotation.x = 0.55;
       g.add(claw);
     }
     // 後ろ爪
     const backClaw = makeCone(0.025, 0.12, c, em, 0.5);
-    backClaw.position.set(x, y-0.72, z-0.12);
+    backClaw.position.set(x, y-0.68, z-0.12);
     backClaw.rotation.x = -0.5;
     g.add(backClaw);
   });
@@ -1436,7 +1436,7 @@ function buildAdultDragon(attr) {
     // アタッカー：大きな爪 + 牙 + 額の傷跡
     legPositions.forEach(([x,y,z]) => {
       const bigClaw = makeCone(0.065, 0.28, c, em, 0.9);
-      bigClaw.position.set(x, y-0.82, z+0.24);
+      bigClaw.position.set(x, y-0.78, z+0.24);
       bigClaw.rotation.x = 0.6;
       g.add(bigClaw);
     });
