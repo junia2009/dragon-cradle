@@ -730,6 +730,29 @@ html, body {
   color: var(--thunder);
 }
 
+/* ---- BGMトグルボタン ---- */
+.bgm-toggle {
+  position: fixed;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 200;
+  width: 2.4rem;
+  height: 2.4rem;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 50%;
+  background: rgba(7,11,20,0.7);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: #e8eaf6;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.bgm-toggle:hover { background: rgba(30,40,60,0.85); }
+
 /* ============================================================
    ナビゲーション
    ============================================================ */

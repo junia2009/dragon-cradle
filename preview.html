@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dragon Model Preview</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -17,6 +18,7 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
 #pv-controls button:hover { background: #444; }
 #pv-controls button.active { background: #666; border-color: #aaa; }
 #pv-controls label { font-size: 13px; color: #aaa; }
+.pv-spacer { display: inline-block; width: 20px; }
 #game-stubs, #game-stubs * { display: none !important; }
 </style>
 </head>
@@ -103,19 +105,19 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   <button data-pv-attr="ice">❄️ 氷</button>
   <button data-pv-attr="thunder">⚡ 雷</button>
   <button data-pv-attr="dark">🌑 闇</button>
-  <span style="width:20px"></span>
+  <span class="pv-spacer"></span>
   <label>段階:</label>
   <button data-pv-stage="baby">幼体</button>
   <button data-pv-stage="adult" class="active">成体</button>
-  <span style="width:20px"></span>
+  <span class="pv-spacer"></span>
   <label>タイプ:</label>
-  <select id="pv-type-select">
+  <select id="pv-type-select" title="育成タイプ選択">
     <option value="balanced">バランス</option>
     <option value="attacker">アタッカー</option>
     <option value="tank">タンク</option>
     <option value="speedster">スピード</option>
   </select>
-  <span style="width:20px"></span>
+  <span class="pv-spacer"></span>
   <button id="pv-btn-wireframe">ワイヤーフレーム</button>
   <button id="pv-btn-reset-cam">カメラリセット</button>
 </div>
