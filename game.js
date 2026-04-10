@@ -861,76 +861,140 @@ function buildAdultDragon(attr) {
   hip.position.set(0, -0.06, -0.45);
   g.add(hip);
 
-  // 首（太く力強い二重構造）
-  const neckBase = makeCylinder(s.nR*1.3, s.nR*1.1, s.nH*0.45, bodyColor, em, 0.2);
-  neckBase.position.set(0, 0.35, 0.55);
-  neckBase.rotation.x = -0.2;
-  g.add(neckBase);
-  const neckUpper = makeCylinder(s.nR*1.05, s.nR*0.85, s.nH*0.45, bodyColor, em, 0.2);
-  neckUpper.position.set(0, 0.75, 0.72);
-  neckUpper.rotation.x = -0.3;
-  g.add(neckUpper);
-  // 首の筋肉（前後左右で太く見せる）
+  // 首（セグメント化された力強い首 — 参考画像のリブ構造）
+  const neckSegs = 5;
+  for (let i = 0; i < neckSegs; i++) {
+    const t = i / (neckSegs - 1);
+    const nY = 0.25 + t * 0.75;
+    const nZ = 0.5 + t * 0.3;
+    const nRad = s.nR * (1.4 - t * 0.4);
+    const seg = makeCylinder(nRad, nRad*0.9, s.nH*0.18, bodyColor, em, 0.2);
+    seg.position.set(0, nY, nZ);
+    seg.rotation.x = -0.2 - t*0.15;
+    g.add(seg);
+    // 各セグメント間に溝（暗い細いリング）
+    if (i < neckSegs - 1) {
+      const groove = makeTorus(nRad*0.85, 0.008, bc2, em, 0.08);
+      groove.position.set(0, nY+0.08, nZ+0.03);
+      groove.rotation.x = Math.PI/2 - 0.2 - t*0.15;
+      g.add(groove);
+    }
+  }
+  // 首の筋肉（左右の太い筋）
   [[-1, 0], [1, 0]].forEach(([side]) => {
-    const neckMuscle = makeEllipsoid(0.08, 0.25, 0.12, bc2, em, 0.12);
-    neckMuscle.position.set(side*0.1, 0.55, 0.62);
+    const neckMuscle = makeEllipsoid(0.1, 0.35, 0.14, bc2, em, 0.12);
+    neckMuscle.position.set(side*0.12, 0.55, 0.6);
     neckMuscle.rotation.x = -0.25;
     g.add(neckMuscle);
   });
-  // 喉（前面の膨らみ）
-  const throat = makeEllipsoid(0.1, 0.2, 0.15, bc2, em, 0.1);
-  throat.position.set(0, 0.5, 0.75);
+  // 喉の袋（前面の膨らみ）
+  const throat = makeEllipsoid(0.12, 0.28, 0.18, bc2, em, 0.1);
+  throat.position.set(0, 0.5, 0.78);
   throat.rotation.x = -0.2;
   g.add(throat);
 
-  // 頭（小さく前方に尖った形状）
-  const head = makeEllipsoid(s.hRx, s.hRy, s.hRz, bodyColor, em, 0.2);
-  head.position.set(0, 1.35, 0.95);
-  g.add(head);
-  const headCrest = makeEllipsoid(s.hRx*0.55, 0.08, s.hRz*0.45, bodyColor, em, 0.22);
-  headCrest.position.set(0, 1.55, 0.82);
-  g.add(headCrest);
-  const jaw = makeEllipsoid(s.hRx*0.65, s.hRy*0.22, s.hRz*0.6, bodyColor, em, 0.18);
-  jaw.position.set(0, 1.12, 1.1);
-  g.add(jaw);
-  const snout = makeEllipsoid(s.hRx*0.45, s.hRy*0.35, s.hRz*0.4, bodyColor, em, 0.2);
-  snout.position.set(0, 1.2, 1.35);
-  g.add(snout);
-  [[-1, 0], [1, 0]].forEach(([side]) => {
-    const cheekbone = makeEllipsoid(0.08, 0.07, 0.1, bodyColor, em, 0.2);
-    cheekbone.position.set(side*0.28, 1.3, 1.1);
-    g.add(cheekbone);
+  // === 頭部（参考: 角張った長い吻、重厚な眉稜、開いた顎） ===
+  // 頭蓋骨上部（後頭部から前頭部）
+  const skull = makeEllipsoid(s.hRx*1.1, s.hRy*0.9, s.hRz*0.8, bodyColor, em, 0.2);
+  skull.position.set(0, 1.35, 0.85);
+  g.add(skull);
+  // 後頭部の張り出し
+  const occiput = makeEllipsoid(s.hRx*0.9, s.hRy*0.7, s.hRz*0.5, bodyColor, em, 0.18);
+  occiput.position.set(0, 1.4, 0.6);
+  g.add(occiput);
+  // 上顎（長く前方に伸びる角張った吻）
+  const upperJaw = makeEllipsoid(s.hRx*0.7, s.hRy*0.45, s.hRz*1.2, bodyColor, em, 0.2);
+  upperJaw.position.set(0, 1.25, 1.25);
+  g.add(upperJaw);
+  // 鼻先（先端を少し細く）
+  const snoutTip = makeEllipsoid(s.hRx*0.5, s.hRy*0.3, s.hRz*0.4, bodyColor, em, 0.2);
+  snoutTip.position.set(0, 1.22, 1.65);
+  g.add(snoutTip);
+  // 鼻梁（上面の角張った稜線）
+  const noseBridge = makeEllipsoid(s.hRx*0.35, 0.06, s.hRz*0.8, bodyColor, em, 0.22);
+  noseBridge.position.set(0, 1.38, 1.2);
+  g.add(noseBridge);
+  // 下顎（分離した大きな下あご — 口が開いた状態）
+  const lowerJaw = makeEllipsoid(s.hRx*0.6, s.hRy*0.3, s.hRz*1.0, bodyColor, em, 0.18);
+  lowerJaw.position.set(0, 1.05, 1.15);
+  lowerJaw.rotation.x = 0.12;
+  g.add(lowerJaw);
+  // 下顎先端
+  const lowerJawTip = makeEllipsoid(s.hRx*0.4, s.hRy*0.2, s.hRz*0.35, bodyColor, em, 0.18);
+  lowerJawTip.position.set(0, 1.0, 1.52);
+  g.add(lowerJawTip);
+  // 口の中（暗い空間）
+  const mouthInside = makeEllipsoid(s.hRx*0.45, 0.06, s.hRz*0.5, '#050505', '#000000', 0);
+  mouthInside.position.set(0, 1.12, 1.3);
+  g.add(mouthInside);
+  // 牙（上顎 × 4）
+  [[-0.12, 1.15, 1.55], [0.12, 1.15, 1.55], [-0.08, 1.15, 1.35], [0.08, 1.15, 1.35]].forEach(([x,y,z], i) => {
+    const fh = i < 2 ? 0.18 : 0.12;
+    const fang = makeCone(0.025, fh, '#e8e0d0', '#ffffff', 0.5);
+    fang.position.set(x, y, z);
+    fang.rotation.x = Math.PI;
+    g.add(fang);
   });
-  [[-1, 0], [1, 0]].forEach(([side]) => {
-    const brow = makeEllipsoid(0.1, 0.04, 0.08, bodyColor, em, 0.22);
-    brow.position.set(side*0.16, 1.45, 1.25);
-    g.add(brow);
+  // 牙（下顎 × 2 — 上向き）
+  [[-0.1, 1.08, 1.42], [0.1, 1.08, 1.42]].forEach(([x,y,z]) => {
+    const fang = makeCone(0.022, 0.14, '#e8e0d0', '#ffffff', 0.5);
+    fang.position.set(x, y, z);
+    g.add(fang);
   });
-
-  // 目（鋭い目）
-  const eyeW = attr === 'thunder' ? 0.06 : 0.07;
-  const eyeH = attr === 'thunder' ? 0.03 : attr === 'ice' ? 0.065 : 0.045;
-  [[-0.2, 0], [0.2, 0]].forEach(([x]) => {
-    const eyeSocket = makeEllipsoid(eyeW+0.03, eyeH+0.03, 0.03, '#050a05', em, 0.05);
-    eyeSocket.position.set(x, 1.38, 1.38);
+  // 重厚な眉稜（目の上に大きく張り出す骨）
+  [[-1, 0], [1, 0]].forEach(([side]) => {
+    const browRidge = makeEllipsoid(0.14, 0.06, 0.12, bodyColor, em, 0.22);
+    browRidge.position.set(side*0.18, 1.48, 1.1);
+    g.add(browRidge);
+    // 眉稜の外側の突起（角張ったフード状）
+    const browHorn = makeEllipsoid(0.06, 0.04, 0.08, bodyColor, em, 0.2);
+    browHorn.position.set(side*0.28, 1.46, 1.05);
+    g.add(browHorn);
+  });
+  // 頬骨（側面に張り出す）
+  [[-1, 0], [1, 0]].forEach(([side]) => {
+    const cheek = makeEllipsoid(0.1, 0.08, 0.15, bodyColor, em, 0.18);
+    cheek.position.set(side*0.25, 1.22, 1.0);
+    g.add(cheek);
+  });
+  // 目（深い眼窩の奥に光る鋭い目）
+  const eyeW = attr === 'thunder' ? 0.055 : 0.06;
+  const eyeH = attr === 'thunder' ? 0.025 : attr === 'ice' ? 0.05 : 0.035;
+  [[-0.22, 0], [0.22, 0]].forEach(([x]) => {
+    const eyeSocket = makeEllipsoid(eyeW+0.04, eyeH+0.04, 0.05, '#020502', '#000000', 0);
+    eyeSocket.position.set(x, 1.38, 1.12);
     g.add(eyeSocket);
-    const eyeGlow = makeEllipsoid(eyeW+0.015, eyeH+0.015, 0.03, c, em, 0.7);
-    eyeGlow.position.set(x, 1.38, 1.4);
+    const eyeGlow = makeEllipsoid(eyeW+0.01, eyeH+0.01, 0.025, c, em, 0.8);
+    eyeGlow.position.set(x, 1.38, 1.14);
     g.add(eyeGlow);
-    const eye = makeEllipsoid(eyeW, eyeH, 0.025, '#ffffff', c, 1.3);
-    eye.position.set(x, 1.38, 1.42);
+    const eye = makeEllipsoid(eyeW, eyeH, 0.02, '#ffffff', c, 1.4);
+    eye.position.set(x, 1.38, 1.16);
     g.add(eye);
-    const pupil = makeEllipsoid(eyeW*0.3, eyeH*0.9, 0.015, '#000000', '#000000', 0);
-    pupil.position.set(x, 1.38, 1.44);
+    const pupil = makeEllipsoid(eyeW*0.3, eyeH*0.85, 0.012, '#000000', '#000000', 0);
+    pupil.position.set(x, 1.38, 1.17);
     g.add(pupil);
   });
-
   // 鼻孔
-  [[-0.07, 0], [0.07, 0]].forEach(([x]) => {
-    const nostril = makeSphere(0.03, c, em, 0.6);
-    nostril.position.set(x, 1.15, 1.58);
+  [[-0.06, 0], [0.06, 0]].forEach(([x]) => {
+    const nostril = makeSphere(0.025, c, em, 0.6);
+    nostril.position.set(x, 1.25, 1.78);
     g.add(nostril);
   });
+  // 頭頂のスパイク列（後頭部→鼻先に向かって小さくなる）
+  for (let i = 0; i < 6; i++) {
+    const spH = 0.12 - i*0.012;
+    const sp = makeCone(0.02, spH, bodyColor, em, 0.3);
+    sp.position.set(0, 1.52-i*0.02, 0.7+i*0.15);
+    sp.rotation.x = -0.2;
+    g.add(sp);
+  }
+  // 下顎のスパイク（アゴヒゲ的な突起 × 3）
+  for (let i = 0; i < 3; i++) {
+    const chinSpike = makeCone(0.018, 0.08+i*0.015, bodyColor, em, 0.2);
+    chinSpike.position.set(0, 0.95, 1.25+i*0.12);
+    chinSpike.rotation.x = Math.PI * 0.85;
+    g.add(chinSpike);
+  }
 
   // 足（体に合った四肢）
   const legPositions = [[-0.45,-0.35,0.4],[0.45,-0.35,0.4],[-0.4,-0.35,-0.4],[0.4,-0.35,-0.4]];
