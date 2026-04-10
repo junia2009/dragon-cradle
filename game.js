@@ -986,7 +986,7 @@ function buildAdultDragon(attr) {
       for (let j = 0; j < 3; j++) {
         const memW = 0.7 - j*0.15;
         const memH = 0.6 - j*0.12;
-        const mem = makeEllipsoid(memW, 0.015, memH, j<2 ? c : '#FF8C00', em, 0.2+j*0.1);
+        const mem = makeEllipsoid(memW, memH, 0.015, j<2 ? c : '#FF8C00', em, 0.2+j*0.1);
         mem.position.set(side*(0.9+j*0.35), 0.35-j*0.08, -0.15-j*0.04);
         mem.rotation.z = side*(0.35+j*0.15);
         g.add(mem);
@@ -1094,7 +1094,7 @@ function buildAdultDragon(attr) {
       for (let j = 0; j < 3; j++) {
         const memW = 0.6 - j*0.12;
         const memH = 0.5 - j*0.1;
-        const mem = makeEllipsoid(memW, 0.012, memH, '#ffffff', '#aaddff', 0.2+j*0.12);
+        const mem = makeEllipsoid(memW, memH, 0.012, '#ffffff', '#aaddff', 0.2+j*0.12);
         mem.position.set(side*(0.8+j*0.3), 0.3-j*0.06, -0.08-j*0.04);
         mem.rotation.z = side*(0.35+j*0.15);
         g.add(mem);
@@ -1205,7 +1205,7 @@ function buildAdultDragon(attr) {
       for (let j = 0; j < 3; j++) {
         const memW = 0.65 - j*0.13;
         const memH = 0.55 - j*0.1;
-        const mem = makeEllipsoid(memW, 0.012, memH, c, em, 0.2+j*0.15);
+        const mem = makeEllipsoid(memW, memH, 0.012, c, em, 0.2+j*0.15);
         mem.position.set(side*(0.8+j*0.35), 0.25-j*0.08, -0.12-j*0.05);
         mem.rotation.z = side*(0.35+j*0.18);
         g.add(mem);
@@ -1328,7 +1328,7 @@ function buildAdultDragon(attr) {
       g.add(wingBone3);
       for (let j = 0; j < 5; j++) {
         const memW = 0.55-j*0.07, memH = 0.65-j*0.08;
-        const mem = makeEllipsoid(memW, 0.012, memH, bodyColor, em, 0.02+j*0.015);
+        const mem = makeEllipsoid(memW, memH, 0.012, bodyColor, em, 0.02+j*0.015);
         mem.position.set(side*(1.3+j*0.35), 0.55-j*0.06, -0.12-j*0.06);
         mem.rotation.z = side*(0.42+j*0.15);
         g.add(mem);
