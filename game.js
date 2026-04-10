@@ -8,10 +8,10 @@
 // 定数
 // ============================================================
 const ATTR = {
-  fire:    { name: '炎ドラゴン',  color: '#FF4500', emissive: '#FF2000', fogColor: 0x1a0500 },
-  ice:     { name: '氷ドラゴン',  color: '#00CFFF', emissive: '#0099BB', fogColor: 0x001a2a },
-  thunder: { name: '雷ドラゴン',  color: '#FFD700', emissive: '#CC9900', fogColor: 0x1a1500 },
-  dark:    { name: '闇ドラゴン',  color: '#7B2FFF', emissive: '#4a00cc', fogColor: 0x080010 },
+  fire:    { name: '炎ドラゴン',  color: '#FF4500', emissive: '#FF2000', fogColor: 0x1a0500, raiseBg: 0x3a1a0a },
+  ice:     { name: '氷ドラゴン',  color: '#00CFFF', emissive: '#0099BB', fogColor: 0x001a2a, raiseBg: 0x0a2a3a },
+  thunder: { name: '雷ドラゴン',  color: '#FFD700', emissive: '#CC9900', fogColor: 0x1a1500, raiseBg: 0x3a3010 },
+  dark:    { name: '闇ドラゴン',  color: '#7B2FFF', emissive: '#4a00cc', fogColor: 0x080010, raiseBg: 0x1a0a30 },
 };
 
 const BASE_STATS = {
@@ -552,7 +552,8 @@ function initRaiseScene(attr) {
     const H = canvas.clientHeight || window.innerHeight;
 
   raiseScene = new THREE.Scene();
-  raiseScene.fog = new THREE.FogExp2(ATTR[attr].fogColor, 0.02);
+  raiseScene.background = new THREE.Color(ATTR[attr].raiseBg);
+  raiseScene.fog = new THREE.FogExp2(ATTR[attr].raiseBg, 0.018);
 
   raiseCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
   raiseCamera.position.set(0, 1, 10);
@@ -562,17 +563,25 @@ function initRaiseScene(attr) {
   raiseRenderer.setSize(W, H, false);
   raiseRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 
-  // ライト
-  raiseScene.add(new THREE.AmbientLight(0x334466, 0.7));
+  // ライト（明るめ）
+  raiseScene.add(new THREE.AmbientLight(0x889aaa, 1.2));
+  const hemi = new THREE.HemisphereLight(0xddeeff, 0x445566, 0.8);
+  raiseScene.add(hemi);
   const spot = new THREE.SpotLight(hexToThreeColor(ATTR[attr].color), 2.5, 30, Math.PI/5, 0.5);
   spot.position.set(0, 10, 6);
   spot.castShadow = true;
   raiseScene.add(spot);
-  const pt = new THREE.PointLight(0x112244, 0.6, 20);
+  const pt = new THREE.PointLight(0x556688, 0.8, 20);
   pt.position.set(-5, 2, -3);
   raiseScene.add(pt);
 
-  createStarField(raiseScene);
+  // 地面
+  const groundGeo = new THREE.PlaneGeometry(60, 60);
+  const groundMat = new THREE.MeshStandardMaterial({ color: ATTR[attr].raiseBg, roughness: 0.9, metalness: 0.1 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -0.7;
+  raiseScene.add(ground);
   buildDragonModel(attr, state.stage);
   updateRaiseUI();
   animateRaise();
