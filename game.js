@@ -1016,15 +1016,13 @@ function animateHatch() {
 // ============================================================
 // Phase3 + Phase4: 育成シーン（Three.js）
 // ============================================================
-let raiseScene, raiseCamera, raiseRenderer, raiseAnimId;
+let raiseScene, raiseCamera, raiseRenderer, raiseAnimId, raiseControls;
 let dragonGroup = null;
 let attrEffectParticles = [];
 let raiseIdleTimer = null;
 let staCountdownTimer = null;
 let staNextRecovery = 0; // 次回スタミナ回復の予定時刻(ms)
-let raiseResizeHandler = null; // resizeリスナ輴笯管理用
-let dragonRotY = 0;       // ユーザー操作によるY回転
-let _dragState = null;     // ドラッグ状態
+let raiseResizeHandler = null; // resizeリスナ管理用
 
 function initRaiseScene(attr) {
   const canvas = document.getElementById('raise-canvas');
@@ -1122,29 +1120,17 @@ function initRaiseScene(attr) {
   };
   window.addEventListener('resize', raiseResizeHandler);
 
-  // ドラッグ/スワイプでドラゴン回転
-  dragonRotY = 0;
-  _dragState = null;
-  const onPointerDown = (e) => {
-    const x = e.touches ? e.touches[0].clientX : e.clientX;
-    _dragState = { startX: x, startRot: dragonRotY };
-  };
-  const onPointerMove = (e) => {
-    if (!_dragState) return;
-    if (e.touches) e.preventDefault();
-    const x = e.touches ? e.touches[0].clientX : e.clientX;
-    const dx = x - _dragState.startX;
-    dragonRotY = _dragState.startRot + dx * 0.01;
-  };
-  const onPointerUp = () => { _dragState = null; };
-  canvas.addEventListener('mousedown', onPointerDown);
-  canvas.addEventListener('mousemove', onPointerMove);
-  canvas.addEventListener('mouseup', onPointerUp);
-  canvas.addEventListener('mouseleave', onPointerUp);
-  canvas.addEventListener('touchstart', onPointerDown, { passive: true });
-  canvas.addEventListener('touchmove', onPointerMove, { passive: false });
-  canvas.addEventListener('touchend', onPointerUp);
-  canvas.addEventListener('touchcancel', onPointerUp);
+  // OrbitControlsで360度回転
+  if (raiseControls) raiseControls.dispose();
+  raiseControls = new THREE.OrbitControls(raiseCamera, canvas);
+  raiseControls.target.set(0, 0.5, 0);
+  raiseControls.enableDamping = true;
+  raiseControls.dampingFactor = 0.08;
+  raiseControls.enablePan = false;
+  raiseControls.minDistance = 4;
+  raiseControls.maxDistance = 20;
+  raiseControls.maxPolarAngle = Math.PI * 0.85;
+  raiseControls.update();
 
   }); // requestAnimationFrame end
 }
@@ -2272,10 +2258,11 @@ function animateRaise() {
   raiseAnimId = requestAnimationFrame(animateRaise);
   const t = performance.now() * 0.001;
 
+  if (raiseControls) raiseControls.update();
+
   if (dragonGroup) {
-    // ゆっくり浮遊 + ユーザー操作による回転
+    // ゆっくり浮遊
     dragonGroup.position.y = Math.sin(t * 0.8) * 0.12;
-    dragonGroup.rotation.y = dragonRotY;
   }
 
   // 属性エフェクトパーティクル
