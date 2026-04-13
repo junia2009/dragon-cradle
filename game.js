@@ -2613,6 +2613,7 @@ function checkBattleEnd() {
 
 function endBattle(win) {
   battleState.running = false;
+  const wasAutoMode = battleState.autoMode;
   battleState.autoMode = false;
 
   // 自動モードボタンの表示をリセット
@@ -2634,10 +2635,10 @@ function endBattle(win) {
     state.score += gained;
 
     addBattleLog(`🏆 勝利！ +${gained}pt`);
-    showBattleResult(true, gained);
+    showBattleResult(true, gained, wasAutoMode);
   } else {
     addBattleLog('💀 敗北…');
-    showBattleResult(false, 0);
+    showBattleResult(false, 0, false);
     state.streak = 0;
     state.battleLevel = Math.max(1, state.battleLevel - 1);
   }
@@ -2646,7 +2647,7 @@ function endBattle(win) {
   saveGame();
 }
 
-function showBattleResult(win, score) {
+function showBattleResult(win, score, autoMode) {
   const resultEl = document.getElementById('battle-result');
   const titleEl  = document.getElementById('battle-result-title');
   const scoreEl  = document.getElementById('battle-result-score');
@@ -2657,17 +2658,36 @@ function showBattleResult(win, score) {
   titleEl.style.color = win ? '#69f0ae' : '#ff5252';
   scoreEl.textContent = win ? `+${score} pt` : 'スコア変化なし';
 
-  document.getElementById('btn-next-battle').onclick = () => {
+  const goNextBattle = () => {
     resultEl.classList.add('hidden');
     if (battleAnimId) cancelAnimationFrame(battleAnimId);
     showScreen('battle');
     initBattleScene(state.attr);
   };
+
+  document.getElementById('btn-next-battle').onclick = goNextBattle;
   document.getElementById('btn-back-raise').onclick = () => {
     if (battleAnimId) cancelAnimationFrame(battleAnimId);
     showScreen('raise');
     initRaiseScene(state.attr);
   };
+
+  // 自動戦闘モードがONだった場合、勝利時は自動で次の敵へ
+  if (win && autoMode) {
+    addBattleLog('🤖 自動で次の敵へ…');
+    setTimeout(() => {
+      goNextBattle();
+      // 次の戦闘でも自動モードをONにする（startTurnが自動コマンドを開始する）
+      if (battleState) {
+        battleState.autoMode = true;
+        const autoBtn = document.getElementById('cmd-auto');
+        if (autoBtn) {
+          autoBtn.textContent = '🤖 自動 ON';
+          autoBtn.classList.add('active');
+        }
+      }
+    }, 1500);
+  }
 }
 
 function updateBattleUI() {
