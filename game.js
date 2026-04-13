@@ -2756,7 +2756,7 @@ function animateBattle() {
 // Phase6: スコア・記録
 // ============================================================
 function updateRecord() {
-  const saved = loadGame();
+  const saved = loadBestRecord();
   const bestScore = Math.max(state.score, saved.bestScore || 0);
   const bestStreak = Math.max(state.streak, saved.bestStreak || 0);
   const totalWin = Math.max(state.totalWin, saved.totalWin || 0);
