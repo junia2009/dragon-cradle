@@ -621,6 +621,18 @@ html, body {
   color: #7dd3fc;
 }
 .cmd-guard:hover { border-color: #00CFFF; }
+.cmd-auto {
+  border-color: rgba(255,183,77,0.5);
+  color: #ffb74d;
+  margin-top: 0.25rem;
+  text-align: center;
+}
+.cmd-auto:hover { border-color: #ffb74d; }
+.cmd-auto.active {
+  background: rgba(255,183,77,0.2);
+  border-color: #ffb74d;
+  box-shadow: 0 0 8px rgba(255,183,77,0.4);
+}
 
 /* MP バー */
 .mp-bar-wrap {
