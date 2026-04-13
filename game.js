@@ -3079,11 +3079,16 @@ function initBattleScene(attr) {
   }
   battleScene.add(playerDragonGroup);
 
-  // 敵ドラゴン（右）
-  enemyDragonGroup = buildAdultDragon(enemyAttr);
+  // 敵ドラゴン（右）：レベル20以下は幼体、21以上は成体
+  const enemyIsAdult = state.battleLevel >= 21;
+  enemyDragonGroup = enemyIsAdult ? buildAdultDragon(enemyAttr) : buildBabyDragon(enemyAttr);
   enemyDragonGroup.position.set(3, 0, 0);
   enemyDragonGroup.rotation.y = -0.6;  // 左向き（プレイヤー方向）
-  enemyDragonGroup.scale.setScalar(1.1);
+  if (enemyIsAdult) {
+    enemyDragonGroup.scale.setScalar(1.1);
+  } else {
+    enemyDragonGroup.scale.multiplyScalar(0.65);
+  }
   battleScene.add(enemyDragonGroup);
 
   // バトル初期化
