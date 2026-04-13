@@ -2229,12 +2229,9 @@ function buildAdultDragon(attr) {
     return g;
   }
 
-  // === 属性別の体型パラメータ（前後に長い流線型、頭は小さめ — 炎用） ===
+  // === 炎の体型パラメータ（前後に長い流線型、頭は小さめ） ===
   const shapes = {
     fire:    { bRx:0.6, bRy:0.55, bRz:1.0, nR:0.22, nH:1.1, hRx:0.32, hRy:0.28, hRz:0.42, hornH:0.9 },
-    ice:     { bRx:0.55, bRy:0.55, bRz:1.0, nR:0.2,  nH:0.95, hRx:0.3, hRy:0.27, hRz:0.4, hornH:0.7 },
-    thunder: { bRx:0.5, bRy:0.45, bRz:0.95, nR:0.18, nH:1.15, hRx:0.28, hRy:0.24, hRz:0.4, hornH:0.6 },
-    dark:    { bRx:0.58, bRy:0.52, bRz:1.0, nR:0.2,  nH:1.05, hRx:0.3, hRy:0.26, hRz:0.42, hornH:1.0 },
   };
   const s = shapes[attr];
 
