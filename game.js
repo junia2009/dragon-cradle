@@ -2286,6 +2286,7 @@ let battleScene, battleCamera, battleRenderer, battleAnimId;
 let playerDragonGroup, enemyDragonGroup;
 let battleState = null;
 const AUTO_COMMAND_DELAY = 500; // 自動戦闘のコマンド実行遅延(ms)
+const AUTO_NEXT_BATTLE_DELAY = 1500; // 自動戦闘で次の敵へ進むまでの遅延(ms)
 
 function initBattleScene(attr) {
   const canvas = document.getElementById('battle-canvas');
@@ -2686,7 +2687,7 @@ function showBattleResult(win, score, autoMode) {
           autoBtn.classList.add('active');
         }
       }
-    }, 1500);
+    }, AUTO_NEXT_BATTLE_DELAY);
   }
 }
 
