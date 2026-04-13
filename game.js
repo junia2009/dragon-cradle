@@ -2285,6 +2285,7 @@ function animateRaise() {
 let battleScene, battleCamera, battleRenderer, battleAnimId;
 let playerDragonGroup, enemyDragonGroup;
 let battleState = null;
+const AUTO_COMMAND_DELAY = 500; // 自動戦闘のコマンド実行遅延(ms)
 
 function initBattleScene(attr) {
   const canvas = document.getElementById('battle-canvas');
@@ -2357,6 +2358,7 @@ function initBattleScene(attr) {
     streak: state.streak,
     playerGuarding: false,
     enemyIntent: null,    // 敵の予告行動
+    autoMode: false,      // 自動戦闘モード
   };
   state.mp = MP_MAX;
 
@@ -2417,6 +2419,57 @@ function startTurn() {
   updateEnemyIntentUI();
   updateMpUI();
   setupCommandButtons();
+
+  // 自動戦闘モードの場合、自動でコマンド実行
+  if (battleState.autoMode) {
+    scheduleAutoCommand();
+  }
+}
+
+// 自動戦闘モード：AIコマンド決定
+function decideAutoCommand() {
+  // 敵が強攻撃を溜めている場合はガード優先
+  if (battleState.enemyIntent === 'heavy') {
+    return 'guard';
+  }
+  // MPが十分なら必殺技を使用
+  if (state.mp >= SPECIAL_COST) {
+    return 'special';
+  }
+  // それ以外は通常攻撃
+  return 'attack';
+}
+
+// 自動コマンド実行をスケジュール
+function scheduleAutoCommand() {
+  setTimeout(() => {
+    if (!battleState || !battleState.running || !battleState.autoMode) return;
+    const cmd = decideAutoCommand();
+    executeCommand(cmd);
+  }, AUTO_COMMAND_DELAY);
+}
+
+// 自動戦闘モード切替
+function toggleAutoMode() {
+  if (!battleState || !battleState.running) return;
+  battleState.autoMode = !battleState.autoMode;
+
+  const btn = document.getElementById('cmd-auto');
+  if (btn) {
+    btn.textContent = battleState.autoMode ? '🤖 自動 ON' : '🤖 自動';
+    btn.classList.toggle('active', battleState.autoMode);
+  }
+
+  // 自動モードON時、コマンドUIが表示中なら即座に自動行動開始
+  if (battleState.autoMode) {
+    addBattleLog('🤖 自動戦闘モード ON');
+    const cmdEl = document.getElementById('battle-commands');
+    if (cmdEl && !cmdEl.classList.contains('hidden')) {
+      scheduleAutoCommand();
+    }
+  } else {
+    addBattleLog('🤖 自動戦闘モード OFF');
+  }
 }
 
 function decideEnemyIntent() {
@@ -2452,6 +2505,14 @@ function setupCommandButtons() {
   document.getElementById('cmd-attack').onclick   = () => executeCommand('attack');
   document.getElementById('cmd-special').onclick  = () => { if (canSpecial) executeCommand('special'); };
   document.getElementById('cmd-guard').onclick    = () => executeCommand('guard');
+  document.getElementById('cmd-auto').onclick     = () => toggleAutoMode();
+
+  // 自動モードボタンの表示状態を更新
+  const autoBtn = document.getElementById('cmd-auto');
+  if (autoBtn && battleState) {
+    autoBtn.textContent = battleState.autoMode ? '🤖 自動 ON' : '🤖 自動';
+    autoBtn.classList.toggle('active', battleState.autoMode);
+  }
 }
 
 function executeCommand(cmd) {
@@ -2552,6 +2613,14 @@ function checkBattleEnd() {
 
 function endBattle(win) {
   battleState.running = false;
+  battleState.autoMode = false;
+
+  // 自動モードボタンの表示をリセット
+  const autoBtn = document.getElementById('cmd-auto');
+  if (autoBtn) {
+    autoBtn.textContent = '🤖 自動';
+    autoBtn.classList.remove('active');
+  }
 
   if (win) {
     state.streak++;
