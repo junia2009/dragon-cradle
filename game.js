@@ -1544,6 +1544,7 @@ function buildBabyDragon(attr) {
 
   }
 
+  g.scale.setScalar(0.8);
   addAttrEffect(g, attr, 'baby');
   return g;
 }
@@ -1636,22 +1637,22 @@ function buildAdultDragon(attr) {
     // 眉稜
     [[-1, 0], [1, 0]].forEach(([side]) => {
       const brow = makeEllipsoid(0.18, 0.08, 0.2, bodyColor, em, 0.25);
-      brow.position.set(side*0.2, 1.65, 0.6);
+      brow.position.set(side*0.2, 1.65, 0.78);
       g.add(brow);
     });
     // 目（小さく鋭い — ゴジラの怒り目）
     [[-0.24, 0], [0.24, 0]].forEach(([x]) => {
-      const eyeSocket = makeEllipsoid(0.09, 0.05, 0.05, '#020502', '#000000', 0);
-      eyeSocket.position.set(x, 1.52, 0.72);
+      const eyeSocket = makeEllipsoid(0.10, 0.06, 0.05, '#020502', '#000000', 0);
+      eyeSocket.position.set(x, 1.52, 0.88);
       g.add(eyeSocket);
-      const eyeGlow = makeEllipsoid(0.075, 0.04, 0.03, c, em, 1.2);
-      eyeGlow.position.set(x, 1.52, 0.74);
+      const eyeGlow = makeEllipsoid(0.085, 0.05, 0.03, c, em, 1.2);
+      eyeGlow.position.set(x, 1.52, 0.90);
       g.add(eyeGlow);
-      const eye = makeEllipsoid(0.06, 0.03, 0.025, '#ffffff', c, 1.5);
-      eye.position.set(x, 1.52, 0.76);
+      const eye = makeEllipsoid(0.07, 0.04, 0.025, '#ffffff', c, 1.5);
+      eye.position.set(x, 1.52, 0.92);
       g.add(eye);
-      const pupil = makeEllipsoid(0.012, 0.025, 0.015, '#000000', '#000000', 0);
-      pupil.position.set(x, 1.52, 0.775);
+      const pupil = makeEllipsoid(0.015, 0.03, 0.015, '#000000', '#000000', 0);
+      pupil.position.set(x, 1.52, 0.935);
       g.add(pupil);
     });
     // 鼻孔
@@ -1813,6 +1814,55 @@ function buildAdultDragon(attr) {
       });
     }
 
+    // 氷柱群（地面から怪獣の斜め後ろ〜真後ろにかけて聳える）
+    const icicleData = [
+      // 真後ろ中央（最大・最も目立つ）
+      [ 0.00, -1.8,  1.00, 1.00,  0.00],
+      [ 0.00, -2.6,  0.85, 0.90,  0.05],
+      [ 0.00, -3.2,  0.65, 0.75,  0.08],
+      // 左斜め後ろ
+      [-0.55, -1.5,  0.90, 0.95, -0.12],
+      [-1.05, -2.0,  0.78, 0.82, -0.18],
+      [-1.55, -2.5,  0.62, 0.70, -0.22],
+      [-0.30, -2.9,  0.72, 0.78,  0.04],
+      // 右斜め後ろ
+      [ 0.55, -1.5,  0.90, 0.95,  0.12],
+      [ 1.05, -2.0,  0.78, 0.82,  0.18],
+      [ 1.55, -2.5,  0.62, 0.70,  0.22],
+      [ 0.30, -2.9,  0.72, 0.78, -0.04],
+      // 最後列（細い添え柱）
+      [-0.80, -3.5,  0.50, 0.60, -0.25],
+      [ 0.80, -3.5,  0.50, 0.60,  0.25],
+      [ 0.00, -3.8,  0.40, 0.55,  0.10],
+    ];
+    icicleData.forEach(([ix, iz, hMul, wMul, tilt]) => {
+      const ih = (3.2 + Math.random() * 0.6) * hMul;
+      const iw = (0.35 + Math.random() * 0.10) * wMul;
+      // 氷柱本体
+      const pillar = makeCone(iw, ih, '#a8e8ff', '#ffffff', 0.55);
+      pillar.position.set(ix, -0.7 + ih * 0.5, iz);
+      pillar.rotation.z = tilt;
+      g.add(pillar);
+      // 根本の台座
+      const base = makeCylinder(iw * 1.5, iw * 1.2, 0.15, '#ccf4ff', '#aaddff', 0.35);
+      base.position.set(ix, -0.7 + 0.075, iz);
+      base.rotation.z = tilt;
+      g.add(base);
+      // 内部グロー
+      const glow = makeCone(iw * 0.55, ih * 0.85, '#e8f8ff', '#aaddff', 0.20);
+      glow.position.set(ix, -0.7 + ih * 0.5, iz);
+      glow.rotation.z = tilt;
+      g.add(glow);
+      // 先端の輝き
+      const tip = makeSphere(iw * 0.38, '#ffffff', '#d0f0ff', 0.9);
+      tip.position.set(
+        ix + Math.sin(tilt) * ih * 0.5,
+        -0.7 + ih,
+        iz
+      );
+      g.add(tip);
+    });
+
     addAttrEffect(g, attr, 'adult');
     return g;
   }
@@ -1889,24 +1939,41 @@ function buildAdultDragon(attr) {
       g.add(ear);
     });
 
-    // 角（一角獣の螺旋角 — 雷撃の源、大きく印象的に）
-    const hornMain = makeCone(0.06, 0.7, c, em, 1.0);
-    hornMain.position.set(0, 1.75, 0.95);
-    hornMain.rotation.x = -0.35;
+    // 角（太く力強い螺旋角 — 雷撃の源、前方を向く）
+    // rotation.x=1.2 → 先端方向 (0, +0.362, +0.932)
+    // 全パーツを horn軸方向に Δ=0.5 スライドして後頭部貫通を解消
+    const hornBase = makeCone(0.20, 0.25, c, em, 0.9);
+    hornBase.position.set(0, 1.601, 1.366);
+    hornBase.rotation.x = 1.2;
+    g.add(hornBase);
+    const hornMain = makeCone(0.13, 1.50, c, em, 1.1);
+    hornMain.position.set(0, 1.701, 1.636);
+    hornMain.rotation.x = 1.2;
     g.add(hornMain);
-    // 角のリング装飾（螺旋を表現）
-    for (let i = 0; i < 4; i++) {
-      const ring = makeTorus(0.06 - i*0.01, 0.01, c, em, 0.6 + i*0.1);
-      ring.position.set(0, 1.82 + i*0.12, 0.92 - i*0.04);
-      ring.rotation.x = Math.PI/2 - 0.35;
+    const hornTip = makeCone(0.04, 0.45, '#ffffff', c, 1.4);
+    hornTip.position.set(0, 2.051, 2.546);
+    hornTip.rotation.x = 1.2;
+    g.add(hornTip);
+    // 螺旋リング（白っぽい黄色 '#ffffcc' — 視認性重視）
+    for (let i = 0; i < 6; i++) {
+      const d = -0.60 + i * (1.20 / 5);
+      const rr = 0.14 - i * 0.017;
+      const tube = 0.020 - i * 0.002;
+      const ring = makeTorus(rr, tube, '#ffffcc', '#ffffaa', 1.0 + i*0.05);
+      ring.position.set(0, 1.701 + d*0.362, 1.636 + d*0.932);
+      ring.rotation.x = 1.2;
       g.add(ring);
     }
-    // 角先端のスパーク（常に光る）
-    const hornTipSpark = makeSphere(0.04, '#ffffff', c, 1.5);
-    hornTipSpark.position.set(0, 2.28, 0.72);
+    // 根本の発光オーラ（額への接合部）
+    const hornRoot = makeSphere(0.12, c, em, 0.8);
+    hornRoot.position.set(0, 1.551, 1.196);
+    g.add(hornRoot);
+    // 先端スパーク
+    const hornTipSpark = makeSphere(0.07, '#ffffff', '#ffffcc', 2.2);
+    hornTipSpark.position.set(0, 2.131, 2.756);
     g.add(hornTipSpark);
-    const hornTipGlow = makeSphere(0.07, c, em, 1.0);
-    hornTipGlow.position.set(0, 2.25, 0.74);
+    const hornTipGlow = makeSphere(0.13, c, em, 1.2);
+    hornTipGlow.position.set(0, 2.131, 2.756);
     g.add(hornTipGlow);
 
     // 目（大きく光る — 馬の目）
@@ -1933,53 +2000,158 @@ function buildAdultDragon(attr) {
       g.add(mane);
     }
 
-    // 四本脚（馬脚 — 長くて力強い、蹄付き）
-    // 前脚
-    [[-0.35,-0.15,0.4],[0.35,-0.15,0.4]].forEach(([x,y,z]) => {
-      const thigh = makeEllipsoid(0.15, 0.28, 0.15, bodyColor, em, 0.15);
-      thigh.position.set(x, y, z);
-      g.add(thigh);
-      const shin = makeCylinder(0.1, 0.07, 0.45, bodyColor, em, 0.15);
-      shin.position.set(x, y-0.35, z+0.02);
-      g.add(shin);
+    // 四本脚（力強い馬の筋肉脚 — 肩筋・前腕・膝関節・管骨・球節・蹄の多段構成）
+    // === 前脚 ===
+    [[-0.40, 0.42], [0.40, 0.42]].forEach(([x, z]) => {
+      // 肩の筋肉
+      const shoulder = makeEllipsoid(0.24, 0.34, 0.22, bodyColor, em, 0.18);
+      shoulder.position.set(x, -0.02, z);
+      g.add(shoulder);
+      // 前腕
+      const forearm = makeCylinder(0.16, 0.13, 0.38, bodyColor, em, 0.15);
+      forearm.position.set(x, -0.40, z + 0.02);
+      g.add(forearm);
+      // 膝関節
+      const knee = makeSphere(0.15, bodyColor, em, 0.20);
+      knee.position.set(x, -0.61, z + 0.03);
+      g.add(knee);
+      // 管骨
+      const cannon = makeCylinder(0.09, 0.08, 0.28, bodyColor, em, 0.15);
+      cannon.position.set(x, -0.78, z + 0.02);
+      g.add(cannon);
+      // 球節
+      const fetlock = makeSphere(0.11, bodyColor, em, 0.18);
+      fetlock.position.set(x, -0.95, z + 0.02);
+      g.add(fetlock);
       // 蹄
-      const hoof = makeCylinder(0.09, 0.1, 0.08, c, em, 0.5);
-      hoof.position.set(x, y-0.62, z+0.04);
+      const hoof = makeCylinder(0.16, 0.17, 0.11, c, em, 0.65);
+      hoof.position.set(x, -1.07, z);
       g.add(hoof);
+      // 蹄の発光リム
+      const hoofRim = makeTorus(0.16, 0.013, c, em, 0.9);
+      hoofRim.position.set(x, -1.09, z);
+      hoofRim.rotation.x = Math.PI / 2;
+      g.add(hoofRim);
     });
-    // 後脚（太く筋肉質）
-    [[-0.35,-0.1,-0.45],[0.35,-0.1,-0.45]].forEach(([x,y,z]) => {
-      const thigh = makeEllipsoid(0.2, 0.32, 0.2, bodyColor, em, 0.15);
-      thigh.position.set(x, y, z);
-      g.add(thigh);
-      const shin = makeCylinder(0.12, 0.08, 0.5, bodyColor, em, 0.15);
-      shin.position.set(x, y-0.38, z+0.03);
-      g.add(shin);
+    // === 後脚（ハック関節が特徴的な馬の後脚） ===
+    [[-0.40, -0.50], [0.40, -0.50]].forEach(([x, z]) => {
+      // 尻・ハム
+      const haunch = makeEllipsoid(0.30, 0.44, 0.30, bodyColor, em, 0.18);
+      haunch.position.set(x, -0.04, z);
+      g.add(haunch);
+      // 大腿部の筋肉
+      const hamstring = makeEllipsoid(0.22, 0.28, 0.20, bodyColor, em, 0.16);
+      hamstring.position.set(x, -0.36, z - 0.05);
+      g.add(hamstring);
+      // ガスキン
+      const gaskin = makeCylinder(0.17, 0.13, 0.38, bodyColor, em, 0.15);
+      gaskin.position.set(x, -0.48, z - 0.06);
+      gaskin.rotation.x = 0.12;
+      g.add(gaskin);
+      // ハック関節
+      const hock = makeEllipsoid(0.15, 0.13, 0.20, bodyColor, em, 0.22);
+      hock.position.set(x, -0.70, z + 0.06);
+      g.add(hock);
+      // ハック以下の管骨
+      const cannon = makeCylinder(0.11, 0.10, 0.26, bodyColor, em, 0.15);
+      cannon.position.set(x, -0.86, z + 0.04);
+      g.add(cannon);
+      // 球節
+      const fetlock = makeSphere(0.12, bodyColor, em, 0.18);
+      fetlock.position.set(x, -1.02, z + 0.04);
+      g.add(fetlock);
       // 蹄
-      const hoof = makeCylinder(0.1, 0.11, 0.09, c, em, 0.5);
-      hoof.position.set(x, y-0.68, z+0.06);
+      const hoof = makeCylinder(0.17, 0.18, 0.12, c, em, 0.65);
+      hoof.position.set(x, -1.15, z + 0.03);
       g.add(hoof);
+      // 蹄の発光リム
+      const hoofRim = makeTorus(0.175, 0.014, c, em, 0.9);
+      hoofRim.position.set(x, -1.17, z + 0.03);
+      hoofRim.rotation.x = Math.PI / 2;
+      g.add(hoofRim);
     });
 
-    // 翼（ペガサスの大きな翼 — バットウイング構造）
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const w = buildBatWing(g, side, {
-        bc: c, be: em, bi: 0.5, mc: c, me: em, mi: 0.3,
-      });
-      // 翼膜上の稲妻ライン
-      for (let j = 0; j < 3; j++) {
-        const bolt = makeCylinder(0.01, 0.01, 0.35+j*0.06, '#ffffff', c, 1.0);
-        bolt.position.set(side*(1.4+j*0.5), 0.7-j*0.15, -0.2-j*0.05);
-        bolt.rotation.z = side*(0.5+j*0.2);
-        g.add(bolt);
+    // 背中の帯電スパイン（背骨に沿った電撃フィン — 雷感の核心）
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8;
+      const sz = 0.35 - i * 0.15;
+      const spH = 0.18 + Math.sin(t * Math.PI) * 0.52;
+      const spW = 0.07 + Math.sin(t * Math.PI) * 0.05;
+      // 各z位置での体表面Y座標を胴体・胸パーツから計算
+      const torsoTopY  = 0.5  * Math.sqrt(Math.max(0, 1 - (sz / 1.1) ** 2));
+      const chestDz    = sz - 0.5;
+      const chestTopY  = Math.abs(chestDz) <= 0.5
+        ? 0.1 + 0.45 * Math.sqrt(Math.max(0, 1 - (chestDz / 0.5) ** 2))
+        : 0;
+      const backY = Math.max(torsoTopY, chestTopY);
+      // 交互に属性色と白で電荷を表現
+      const spineColor = i % 2 === 0 ? c : '#ffffff';
+      const spineEm    = i % 2 === 0 ? em : c;
+      const spine = makeCone(spW, spH, spineColor, spineEm, 0.9 + (i%2)*0.3);
+      spine.position.set(0, backY + spH * 0.5, sz);
+      g.add(spine);
+      // スパイン根本のリングプレート（体表面に密着）
+      const base = makeCylinder(spW * 1.6, spW * 1.6, 0.04, c, em, 0.7);
+      base.position.set(0, backY - 0.01, sz);
+      g.add(base);
+      // スパイン先端のスパーク
+      if (i % 2 === 0) {
+        const tip = makeSphere(0.05, '#ffffff', c, 1.5);
+        tip.position.set(0, backY + spH + 0.03, sz);
+        g.add(tip);
       }
-      // 先端のスパーク
-      [w.tip, w.sp2].forEach(tip => {
-        const spark = makeSphere(0.045, '#ffffff', c, 1.3);
-        spark.position.set(...tip);
-        g.add(spark);
+    }
+
+    // 体側面の放電アーク（側腹から体外へ弧を描く雷）
+    [[-1, 0], [1, 0]].forEach(([side]) => {
+      // メイン放電ライン（体に沿って斜めに走る稲妻）
+      const arcAngles = [0.7, 1.1, -0.3];
+      arcAngles.forEach((rot, ai) => {
+        const arc = makeCylinder(0.008, 0.008, 0.5 + ai*0.08, '#ffffff', c, 1.2);
+        arc.position.set(side*(0.52 + ai*0.08), 0.2 - ai*0.12, 0.2 - ai*0.25);
+        arc.rotation.z = side * (0.9 + ai*0.3);
+        arc.rotation.x = rot * 0.2;
+        g.add(arc);
+        // 放電先端の光点
+        const dot = makeSphere(0.025, '#ffffff', c, 1.6);
+        dot.position.set(side*(0.75 + ai*0.12), 0.05 - ai*0.18, 0.22 - ai*0.28);
+        g.add(dot);
       });
+      // 肩の電磁コイル（螺旋リング）
+      for (let ri = 0; ri < 3; ri++) {
+        const coil = makeTorus(0.17 - ri*0.03, 0.012, c, em, 0.5 + ri*0.15);
+        coil.position.set(side*0.5, 0.22 - ri*0.06, 0.45 - ri*0.05);
+        coil.rotation.y = side * (0.4 + ri*0.15);
+        coil.rotation.x = 0.5;
+        g.add(coil);
+      }
     });
+
+    // 帯電オーラリング（胴体を包む電磁フィールド — 3本の楕円輪）
+    [[0, 0, 0.1], [0, 0.08, -0.3], [0, 0.04, -0.7]].forEach(([dx, dy, dz], ri) => {
+      const aura = makeTorus(0.62 - ri*0.04, 0.015, c, em, 0.35 + ri*0.1);
+      aura.position.set(dx, dy, dz);
+      aura.rotation.x = Math.PI/2 + 0.08;
+      g.add(aura);
+    });
+
+    // 荷電粒子群（体周囲を漂う電気の粒 — 6点対称）
+    for (let i = 0; i < 6; i++) {
+      const angle = i * Math.PI / 3;
+      const r = 0.78;
+      const cx2 = Math.sin(angle) * r;
+      const cz2 = Math.cos(angle) * r * 0.55;
+      const particle = makeSphere(0.035, i%2===0 ? '#ffffff' : c, c, 1.0 + (i%2)*0.4);
+      particle.position.set(cx2, 0.15 + Math.sin(angle*0.8)*0.2, cz2);
+      g.add(particle);
+      // 各粒子から体へのアーク
+      const arcLen = 0.18 + (i%3)*0.04;
+      const micro = makeCylinder(0.005, 0.005, arcLen, c, em, 0.9);
+      micro.position.set(cx2*0.7, 0.15 + Math.sin(angle*0.8)*0.2, cz2*0.7);
+      micro.rotation.z = Math.atan2(cx2, 1) * 0.8;
+      micro.rotation.x = Math.atan2(cz2, 1) * 0.6;
+      g.add(micro);
+    }
 
     // 馬の尻尾（流れるようなエレクトリックテイル）
     const tailBase = makeSphere(0.2, bodyColor, em, 0.15);
@@ -2019,9 +2191,9 @@ function buildAdultDragon(attr) {
     // 育成タイプ装飾
     if (type === 'attacker') {
       // より大きな角
-      const bigHorn = makeCone(0.03, 0.25, '#ffffff', c, 1.0);
-      bigHorn.position.set(0, 2.35, 0.68);
-      bigHorn.rotation.x = -0.35;
+      const bigHorn = makeCone(0.06, 0.35, '#ffffff', c, 1.5);
+      bigHorn.position.set(0, 2.431, 2.756);
+      bigHorn.rotation.x = 1.2;
       g.add(bigHorn);
       // 蹄のスパーク
       [[-0.35,-0.77,0.44],[0.35,-0.77,0.44],[-0.35,-0.78,-0.39],[0.35,-0.78,-0.39]].forEach(([x,y,z]) => {
@@ -2043,14 +2215,17 @@ function buildAdultDragon(attr) {
     } else if (type === 'speedster') {
       [[-1, 0], [1, 0]].forEach(([side]) => {
         const booster = makeEllipsoid(0.08, 0.12, 0.3, c, em, 0.9);
-        booster.position.set(side*2.0, 0.3, -0.7);
+        booster.position.set(side*0.65, 0.2, -0.6);
         booster.rotation.z = side*0.3;
         g.add(booster);
         const glow = makeSphere(0.04, '#ffffff', c, 1.0);
-        glow.position.set(side*2.0, 0.3, -0.95);
+        glow.position.set(side*0.65, 0.2, -0.9);
         g.add(glow);
       });
     }
+
+    // グループ全体を+0.43上げて前蹄底が地面(y=-0.7)に揃う
+    g.position.y = 0.43;
 
     addAttrEffect(g, attr, 'adult');
     return g;
@@ -2094,27 +2269,27 @@ function buildAdultDragon(attr) {
     });
 
     // フード内部の深い闇（虚空 — 何も見えない暗闇）
-    const hoodVoid = makeEllipsoid(0.38, 0.35, 0.15, '#020005', '#000000', 0);
-    hoodVoid.position.set(0, 1.38, 0.35);
+    const hoodVoid = makeEllipsoid(0.38, 0.35, 0.12, '#020005', '#000000', 0);
+    hoodVoid.position.set(0, 1.38, 0.30);
     g.add(hoodVoid);
     // もう一層の闇（より深く）
-    const hoodVoid2 = makeEllipsoid(0.3, 0.28, 0.1, '#010003', '#000000', 0);
-    hoodVoid2.position.set(0, 1.35, 0.4);
+    const hoodVoid2 = makeEllipsoid(0.3, 0.28, 0.08, '#010003', '#000000', 0);
+    hoodVoid2.position.set(0, 1.35, 0.34);
     g.add(hoodVoid2);
 
     // フード内で光る目（得体の知れない存在の証 — 闇の中で鋭く光る）
     [[-0.14, 0], [0.14, 0]].forEach(([x]) => {
       // 外側の大きなグロー（ぼんやり）
-      const outerGlow = makeSphere(0.1, c, em, 1.0);
-      outerGlow.position.set(x, 1.35, 0.42);
+      const outerGlow = makeSphere(0.12, c, em, 1.2);
+      outerGlow.position.set(x, 1.32, 0.52);
       g.add(outerGlow);
       // 中間グロー
-      const midGlow = makeSphere(0.065, c, em, 1.5);
-      midGlow.position.set(x, 1.35, 0.45);
+      const midGlow = makeSphere(0.08, c, em, 1.8);
+      midGlow.position.set(x, 1.32, 0.54);
       g.add(midGlow);
       // 中心（鋭く白く光る — 縦スリット風）
-      const eyeCore = makeEllipsoid(0.02, 0.05, 0.02, '#ffffff', c, 2.0);
-      eyeCore.position.set(x, 1.35, 0.48);
+      const eyeCore = makeEllipsoid(0.025, 0.06, 0.02, '#ffffff', c, 2.5);
+      eyeCore.position.set(x, 1.32, 0.57);
       g.add(eyeCore);
     });
 
