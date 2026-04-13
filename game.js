@@ -1040,8 +1040,8 @@ function initRaiseScene(attr) {
   raiseScene.fog = new THREE.FogExp2(ATTR[attr].raiseBg, 0.018);
 
   raiseCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
-  raiseCamera.position.set(0, 1, 10);
-  raiseCamera.lookAt(0, 0, 0);
+  raiseCamera.position.set(0, 1.2, 5.5);
+  raiseCamera.lookAt(0, 0.8, 0);
 
   raiseRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   raiseRenderer.setSize(W, H, false);
@@ -1123,7 +1123,7 @@ function initRaiseScene(attr) {
   // OrbitControlsで360度回転
   if (raiseControls) raiseControls.dispose();
   raiseControls = new THREE.OrbitControls(raiseCamera, canvas);
-  raiseControls.target.set(0, 0.5, 0);
+  raiseControls.target.set(0, 0.8, 0);
   raiseControls.enableDamping = true;
   raiseControls.dampingFactor = 0.08;
   raiseControls.enablePan = false;
@@ -1142,6 +1142,7 @@ function buildDragonModel(attr, stage) {
   dragonGroup = stage === 'baby'
     ? buildBabyDragon(attr)
     : buildAdultDragon(attr);
+  if (stage === 'baby') dragonGroup.scale.multiplyScalar(0.65);
   raiseScene.add(dragonGroup);
 }
 
@@ -3071,7 +3072,11 @@ function initBattleScene(attr) {
   playerDragonGroup = state.stage === 'adult' ? buildAdultDragon(attr) : buildBabyDragon(attr);
   playerDragonGroup.position.set(-3, 0, 0);
   playerDragonGroup.rotation.y = 0.6;
-  playerDragonGroup.scale.setScalar(1.1);
+  if (state.stage === 'adult') {
+    playerDragonGroup.scale.setScalar(1.1);
+  } else {
+    playerDragonGroup.scale.multiplyScalar(0.65);
+  }
   battleScene.add(playerDragonGroup);
 
   // 敵ドラゴン（右）
