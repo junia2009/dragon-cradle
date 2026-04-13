@@ -2285,6 +2285,7 @@ function animateRaise() {
 let battleScene, battleCamera, battleRenderer, battleAnimId;
 let playerDragonGroup, enemyDragonGroup;
 let battleState = null;
+const AUTO_COMMAND_DELAY = 500; // 自動戦闘のコマンド実行遅延(ms)
 
 function initBattleScene(attr) {
   const canvas = document.getElementById('battle-canvas');
@@ -2421,11 +2422,7 @@ function startTurn() {
 
   // 自動戦闘モードの場合、自動でコマンド実行
   if (battleState.autoMode) {
-    setTimeout(() => {
-      if (!battleState || !battleState.running) return;
-      const cmd = decideAutoCommand();
-      executeCommand(cmd);
-    }, 500);
+    scheduleAutoCommand();
   }
 }
 
@@ -2441,6 +2438,15 @@ function decideAutoCommand() {
   }
   // それ以外は通常攻撃
   return 'attack';
+}
+
+// 自動コマンド実行をスケジュール
+function scheduleAutoCommand() {
+  setTimeout(() => {
+    if (!battleState || !battleState.running || !battleState.autoMode) return;
+    const cmd = decideAutoCommand();
+    executeCommand(cmd);
+  }, AUTO_COMMAND_DELAY);
 }
 
 // 自動戦闘モード切替
@@ -2459,11 +2465,7 @@ function toggleAutoMode() {
     addBattleLog('🤖 自動戦闘モード ON');
     const cmdEl = document.getElementById('battle-commands');
     if (cmdEl && !cmdEl.classList.contains('hidden')) {
-      setTimeout(() => {
-        if (!battleState || !battleState.running || !battleState.autoMode) return;
-        const cmd = decideAutoCommand();
-        executeCommand(cmd);
-      }, 500);
+      scheduleAutoCommand();
     }
   } else {
     addBattleLog('🤖 自動戦闘モード OFF');
