@@ -118,8 +118,8 @@ const Music = (() => {
 
     document.addEventListener('visibilitychange', () => {
       if (!ctx) return;
-      if (document.hidden) ctx.suspend();
-      else if (cur) { ctx.resume(); resync(); }
+      if (document.hidden) { ctx.suspend(); if (silentEl) silentEl.pause(); }
+      else if (cur) { ctx.resume().then(resync).catch(() => {}); }
     });
     return ctx;
   }
@@ -136,9 +136,42 @@ const Music = (() => {
     return buf;
   }
 
+  // iOS 対策：消音スイッチ ON でも鳴るよう「再生」カテゴリのオーディオセッションにする
+  let silentEl = null;
+  function silentWavUrl() {
+    const n = 800, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    w(36, 'data'); v.setUint32(40, n * 2, true);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+  function keepPlaybackSession() {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* noop */ }
+    if (navigator.audioSession || !/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent) || !('ontouchend' in document)) return;
+    if (!silentEl) {
+      silentEl = document.createElement('audio');
+      silentEl.src = silentWavUrl();
+      silentEl.loop = true;
+      silentEl.setAttribute('playsinline', '');
+      silentEl.setAttribute('x-webkit-airplay', 'deny');
+    }
+    if (silentEl.paused) silentEl.play().catch(() => {});
+  }
+
+  // ユーザー操作の中で呼ぶ。suspended / interrupted のどちらからも復帰させる
   function unlock() {
     if (!ensure()) return;
-    if (ctx.state === 'suspended') ctx.resume();
+    keepPlaybackSession();
+    if (ctx.state !== 'running') {
+      ctx.resume().then(resync).catch(() => {});
+      // 無音を1サンプル鳴らして出力経路を起こす（古い iOS Safari 対策）
+      const src = ctx.createBufferSource();
+      src.buffer = ctx.createBuffer(1, 1, 22050);
+      src.connect(ctx.destination);
+      src.start(0);
+    }
   }
 
   // ----------------------------------------------------------
@@ -918,6 +951,7 @@ const Music = (() => {
   return {
     play, set, stinger, sfx, stop, unlock, toggleMute,
     isMuted: () => muted,
+    isRunning: () => !!ctx && ctx.state === 'running',
     getCtx: () => ensure(),
     get theme() { return cur ? cur.theme : null; },
     get section() { return cur ? cur.secName : null; },
