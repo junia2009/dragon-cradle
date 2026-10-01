@@ -1,3666 +1,1380 @@
 /* ============================================================
    Dragon Cradle — game.js
-   Phase 1: 基盤 / Phase 2: 卵・孵化 / Phase 3: ドラゴンモデル
+   画面遷移 / 3Dシーン / 孵化・育成・バトルの進行 / セーブ
+   依存: THREE, balance.js, music.js, models.js
    ============================================================ */
 'use strict';
 
-// ============================================================
-// 定数
-// ============================================================
-const ATTR = {
-  fire:    { name: '炎ドラゴン',  color: '#FF4500', emissive: '#FF2000', fogColor: 0x1a0500, raiseBg: 0x3a1a0a },
-  ice:     { name: '氷ドラゴン',  color: '#00CFFF', emissive: '#0099BB', fogColor: 0x001a2a, raiseBg: 0x0a2a3a },
-  thunder: { name: '雷ドラゴン',  color: '#FFD700', emissive: '#CC9900', fogColor: 0x1a1500, raiseBg: 0x3a3010 },
-  dark:    { name: '闇ドラゴン',  color: '#7B2FFF', emissive: '#4a00cc', fogColor: 0x080010, raiseBg: 0x1a0a30 },
-};
+const VERSION      = 'v3.0.0';
+const SAVE_KEY     = 'dragon_cradle_save';
+const BEST_KEY     = SAVE_KEY + '_best';
+const SAVE_VERSION = 3;
+const AUTO_COMMAND_DELAY     = 650;  // 自動戦闘のコマンド実行遅延(ms)
+const AUTO_NEXT_BATTLE_DELAY = 2200; // 自動戦闘で次の敵へ進むまでの遅延(ms)
 
-const BASE_STATS = {
-  fire:    { hp: 80,  atk: 25, def: 10, spd: 15 },
-  ice:     { hp: 100, atk: 15, def: 25, spd: 10 },
-  thunder: { hp: 70,  atk: 20, def: 8,  spd: 22 },
-  dark:    { hp: 90,  atk: 20, def: 20, spd: 12 },
-};
-
-// 成長ゲージ必要pt（幼体→成体に50pt）
-const HATCH_MAX    = 100;   // 孵化ゲージ最大
-const RAISE_MAX    = 50;    // 成長ゲージ最大（幼体→成体）
-const HATCH_IDLE   = 6000;  // 放置孵化インターバル(ms) + 1pt
-const RAISE_IDLE   = 60000; // 放置成長インターバル(ms) + 1pt
-// 孵化タイミング
-const HATCH_TIMING_WINDOW = 0.18; // ±この範囲がPERFECT（0〜1の正規化位置）
-
-// スタミナ
-const STA_MAX        = 5;
-const STA_RECOVER_MS = 60000; // 1スタミナ回復に60秒
-
-// バトル MP
-const MP_MAX        = 5;
-const SPECIAL_COST  = 3;
-
-// ドラゴンタイプ（育成傾向で決まる）
-const DRAGON_TYPES = {
-  balanced: { label: 'バランス型',   special: 'ドラゴンブレス',  color: null },
-  attacker: { label: 'アタッカー型', special: 'バーサークブロー', color: '#FF4500' },
-  tank:     { label: 'タンク型',    special: 'アイアンウォール', color: '#00CFFF' },
-  speedster:{ label: 'スピード型',  special: 'サンダーラッシュ', color: '#FFD700' },
-};
+const $ = id => document.getElementById(id);
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const ATTR_ICON = { fire: 'i-flame', ice: 'i-snow', thunder: 'i-bolt', dark: 'i-moon' };
+const STAT_LABEL = { hp: 'HP', atk: 'ATK', def: 'DEF', spd: 'SPD' };
 
 // ============================================================
 // 状態
 // ============================================================
-let state = {
-  attr: null,       // 'fire' | 'ice' | 'thunder' | 'dark'
-  stage: 'egg',     // 'egg' | 'baby' | 'adult'
-  hatchPt: 0,
-  growthPt: 0,
-  stats: null,
-  score: 0,
-  streak: 0,
-  totalWin: 0,
-  battleLevel: 1,
-  lastSaveTime: Date.now(),
-  // 訓練カウント（個性に影響）
-  trainCount: { atk: 0, def: 0, spd: 0 },
-  dragonType: 'balanced',
-  // バトルMP
-  mp: MP_MAX,
-  // スタミナ
-  stamina: STA_MAX,
-};
+function freshState() {
+  return {
+    v: SAVE_VERSION,
+    attr: null,
+    stage: 'egg',          // egg | baby | adult
+    hatchPt: 0,
+    growthPt: 0,
+    level: 1,
+    exp: 0,
+    trained: { hp: 0, atk: 0, def: 0, spd: 0 },
+    trainCount: { atk: 0, def: 0, spd: 0 },
+    dragonType: 'balanced',
+    stamina: STA_MAX,
+    staNext: 0,            // 次にスタミナが回復する時刻
+    idleAt: Date.now(),    // 放置成長の基準時刻
+    battleLevel: 1,
+    score: 0,
+    streak: 0,
+    totalWin: 0,
+    autoMode: false,
+  };
+}
+let state = freshState();
 
-// セーブデータキー
-const SAVE_KEY = 'dragon_cradle_save';
+function dragonData() {
+  return { attr: state.attr, level: state.level, stage: state.stage === 'adult' ? 'adult' : 'baby', trained: state.trained };
+}
+const playerStats = () => calcStats(dragonData());
 
 // ============================================================
-// BGMシステム (Web Audio API — 壮大なオーケストラ風)
+// 3D ステージ（キャンバス・レンダラは全画面で1つを共有）
 // ============================================================
-const BGM = (() => {
-  let ctx = null;
-  let masterGain = null;
-  let currentTrack = null;
-  let currentNodes = [];
-  let muted = false;
-  const VOLUME = 0.3;
+const Stage = (() => {
+  const canvas = $('stage');
+  let renderer = null;
+  let current = null;
+  let last = performance.now();
 
-  function getCtx() {
-    if (!ctx) {
-      ctx = new (window.AudioContext || window.webkitAudioContext)();
-      masterGain = ctx.createGain();
-      masterGain.gain.value = muted ? 0 : VOLUME;
-      masterGain.connect(ctx.destination);
+  function ensure() {
+    if (renderer) return renderer;
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    window.addEventListener('resize', resize);
+    requestAnimationFrame(loop);
+    return renderer;
+  }
+
+  function resize() {
+    if (!renderer) return;
+    const W = window.innerWidth, H = window.innerHeight;
+    if (!W || !H) return;
+    renderer.setSize(W, H, false);
+    if (current) {
+      current.camera.aspect = W / H;
+      current.camera.updateProjectionMatrix();
+      if (current.onResize) current.onResize(W, H);
     }
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
   }
 
-  function stopAll() {
-    currentNodes.forEach(n => { try { n.stop(); } catch(e){} try { n.disconnect(); } catch(e){} });
-    currentNodes = [];
-    currentTrack = null;
+  function loop(now) {
+    requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (!current || document.hidden) return;
+    current.update(dt, now / 1000);
+    renderer.render(current.scene, current.camera);
   }
 
-  // ノート発音ヘルパー（アタック→サステイン→リリース）
-  function note(ac, type, freq, startT, dur, gainVal, dest) {
-    const o = ac.createOscillator();
-    const g = ac.createGain();
-    o.type = type;
-    o.frequency.value = freq;
-    g.gain.setValueAtTime(0, startT);
-    g.gain.linearRampToValueAtTime(gainVal, startT + 0.04);
-    g.gain.setValueAtTime(gainVal, startT + dur - 0.06);
-    g.gain.linearRampToValueAtTime(0, startT + dur);
-    o.connect(g);
-    g.connect(dest);
-    o.start(startT);
-    o.stop(startT + dur);
-    currentNodes.push(o);
+  function disposeScene(s) {
+    if (!s) return;
+    if (s.dispose) s.dispose();
+    const shared = glowTexture();
+    s.scene.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      mats.forEach(m => {
+        ['map', 'emissiveMap'].forEach(k => { if (m[k] && m[k] !== shared) m[k].dispose(); });
+        m.dispose();
+      });
+    });
   }
 
-  // プラック音（ハープ/チェレスタ風）
-  function pluck(ac, freq, startT, decay, gainVal, dest) {
-    const o = ac.createOscillator();
-    const g = ac.createGain();
-    o.type = 'sine';
-    o.frequency.value = freq;
-    g.gain.setValueAtTime(0, startT);
-    g.gain.linearRampToValueAtTime(gainVal, startT + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.001, startT + decay);
-    o.connect(g);
-    g.connect(dest);
-    o.start(startT);
-    o.stop(startT + decay + 0.05);
-    currentNodes.push(o);
+  function set(sceneObj) {
+    ensure();
+    disposeScene(current);
+    current = sceneObj;
+    resize();
+    document.body.classList.add('has-stage');
   }
 
-  // リバーブ風エフェクト
-  function createReverb(ac) {
-    const convolver = ac.createConvolver();
-    const len = ac.sampleRate * 2;
-    const buf = ac.createBuffer(2, len, ac.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const data = buf.getChannelData(ch);
-      for (let i = 0; i < len; i++) {
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  function clear() {
+    disposeScene(current);
+    current = null;
+    document.body.classList.remove('has-stage');
+  }
+
+  return { set, clear, get current() { return current; }, get canvas() { return canvas; } };
+})();
+
+// 共通ライティング
+function addLights(scene, accentHex, opts = {}) {
+  scene.add(new THREE.HemisphereLight(0xbfc8ff, 0x1a1420, opts.hemi ?? 0.75));
+  scene.add(new THREE.AmbientLight(0x6a7088, opts.ambient ?? 0.55));
+  const key = new THREE.DirectionalLight(0xfff1dc, opts.key ?? 1.0);
+  key.position.set(3, 6, 5);
+  scene.add(key);
+  const rim = new THREE.PointLight(new THREE.Color(accentHex), opts.rim ?? 2.2, 14);
+  rim.position.set(-1.5, 3, -3.5);
+  scene.add(rim);
+  const fill = new THREE.PointLight(0x5566aa, 0.6, 18);
+  fill.position.set(-5, 2, 4);
+  scene.add(fill);
+  return { key, rim, fill };
+}
+
+// 汎用トゥイーン
+function makeTweener() {
+  const list = [];
+  return {
+    add(dur, fn) {
+      return new Promise(resolve => list.push({ t0: performance.now(), dur, fn, resolve }));
+    },
+    update() {
+      const now = performance.now();
+      for (let i = list.length - 1; i >= 0; i--) {
+        const tw = list[i];
+        const p = Math.min(1, (now - tw.t0) / tw.dur);
+        tw.fn(p);
+        if (p >= 1) { list.splice(i, 1); tw.resolve(); }
       }
-    }
-    convolver.buffer = buf;
-    return convolver;
-  }
+    },
+  };
+}
+const easeOut = p => 1 - Math.pow(1 - p, 3);
 
-  // リバーブ付きバス作成
-  function makeBus(ac, dryVal, wetVal) {
-    const rev = createReverb(ac);
-    rev.connect(masterGain);
-    const dry = ac.createGain();
-    dry.gain.value = dryVal;
-    dry.connect(masterGain);
-    const wet = ac.createGain();
-    wet.gain.value = wetVal;
-    wet.connect(rev);
-    const dest = ac.createGain();
-    dest.connect(dry);
-    dest.connect(wet);
-    return dest;
-  }
-
-  // === タイトル画面BGM：神秘的なチェレスタ + ゆったりしたパッド ===
-  function playTitle() {
-    if (currentTrack === 'title') return;
-    stopAll();
-    currentTrack = 'title';
-    const ac = getCtx();
-    const dest = makeBus(ac, 0.6, 0.4);
-
-    const loopDur = 16;
-    function scheduleLoop(startAt) {
-      if (currentTrack !== 'title') return;
-      const t0 = startAt || (ac.currentTime + 0.05);
-
-      // ゆったりしたベースパッド（1音ずつ、5度なし）
-      const pad = [
-        { f: 130.81, t: 0, d: 8 },   // C3
-        { f: 174.61, t: 8, d: 8 },   // F3
-      ];
-      pad.forEach(n => {
-        note(ac, 'sine', n.f, t0 + n.t, n.d, 0.08, dest);
-      });
-
-      // チェレスタ風メロディ（Cメジャー系、音数を絞る）
-      const melody = [
-        { f: 523.25, t: 0,    d: 1.2 },  // C5
-        { f: 659.25, t: 1.5,  d: 1.2 },  // E5
-        { f: 783.99, t: 3,    d: 2.0 },  // G5
-        { f: 659.25, t: 5.5,  d: 1.5 },  // E5
-        { f: 523.25, t: 7.5,  d: 2.0 },  // C5
-        { f: 440.00, t: 10,   d: 1.5 },  // A4
-        { f: 493.88, t: 12,   d: 1.5 },  // B4
-        { f: 523.25, t: 14,   d: 1.8 },  // C5
-      ];
-      melody.forEach(n => {
-        pluck(ac, n.f, t0 + n.t, n.d, 0.15, dest);
-      });
-
-      // ハープアルペジオ（後半、Cメジャーのみ）
-      const harp = [261.63, 329.63, 392.00, 523.25];
-      harp.forEach((f, i) => {
-        pluck(ac, f, t0 + 10 + i * 0.5, 1.5, 0.08, dest);
-      });
-
-      const nextStart = t0 + loopDur;
-      const delay = (nextStart - ac.currentTime - 0.5) * 1000;
-      setTimeout(() => scheduleLoop(nextStart), Math.max(0, delay));
-    }
-    scheduleLoop();
-  }
-
-  // === 育成画面BGM：温かく穏やかなメロディ ===
-  function playRaise() {
-    if (currentTrack === 'raise') return;
-    stopAll();
-    currentTrack = 'raise';
-    const ac = getCtx();
-    const dest = makeBus(ac, 0.7, 0.25);
-
-    const loopDur = 16;
-    function scheduleLoop(startAt) {
-      if (currentTrack !== 'raise') return;
-      const t0 = startAt || (ac.currentTime + 0.05);
-
-      // ベースノート（ルート音のみ、シンプル）
-      const bass = [
-        { f: 130.81, t: 0,  d: 4 },   // C3
-        { f: 146.83, t: 4,  d: 4 },   // D3
-        { f: 174.61, t: 8,  d: 4 },   // F3
-        { f: 130.81, t: 12, d: 4 },   // C3
-      ];
-      bass.forEach(n => {
-        note(ac, 'sine', n.f, t0 + n.t, n.d, 0.07, dest);
-      });
-
-      // 優しいメロディ（三角波、音数控えめ）
-      const mel = [
-        { f: 523.25, t: 0,   d: 1.2 },  // C5
-        { f: 587.33, t: 1.5, d: 1.0 },  // D5
-        { f: 659.25, t: 3,   d: 2.0 },  // E5
-        { f: 523.25, t: 5.5, d: 1.5 },  // C5
-        { f: 440.00, t: 8,   d: 1.5 },  // A4
-        { f: 493.88, t: 10,  d: 1.2 },  // B4
-        { f: 523.25, t: 12,  d: 2.0 },  // C5
-        { f: 392.00, t: 14.5,d: 1.3 },  // G4
-      ];
-      mel.forEach(n => {
-        const st = t0 + n.t;
-        const o1 = ac.createOscillator();
-        const g1 = ac.createGain();
-        o1.type = 'triangle';
-        o1.frequency.value = n.f;
-        g1.gain.setValueAtTime(0, st);
-        g1.gain.linearRampToValueAtTime(0.1, st + 0.05);
-        g1.gain.setValueAtTime(0.1, st + n.d * 0.7);
-        g1.gain.linearRampToValueAtTime(0, st + n.d);
-        o1.connect(g1);
-        g1.connect(dest);
-        o1.start(st);
-        o1.stop(st + n.d + 0.1);
-        currentNodes.push(o1);
-      });
-
-      // ピチカート（拍頭のみ、4拍に1回）
-      const pizzBass = [130.81, 146.83, 174.61, 130.81];
-      pizzBass.forEach((f, i) => {
-        pluck(ac, f * 2, t0 + i * 4, 0.5, 0.07, dest);
-      });
-
-      const nextStart = t0 + loopDur;
-      const delay = (nextStart - ac.currentTime - 0.5) * 1000;
-      setTimeout(() => scheduleLoop(nextStart), Math.max(0, delay));
-    }
-    scheduleLoop();
-  }
-
-  // === バトル画面BGM: 疾走感のある熱いバトル曲 ===
-  function playBattle() {
-    if (currentTrack === 'battle') return;
-    stopAll();
-    currentTrack = 'battle';
-    const ac = getCtx();
-    const dest = makeBus(ac, 0.75, 0.2);
-
-    // ローパスフィルター（ブラス・メロディ用）
-    const lpf = ac.createBiquadFilter();
-    lpf.type = 'lowpass';
-    lpf.frequency.value = 2200;
-    lpf.connect(dest);
-
-    // ハイパスフィルター（パーカッション用）
-    const hpf = ac.createBiquadFilter();
-    hpf.type = 'highpass';
-    hpf.frequency.value = 800;
-    hpf.connect(dest);
-
-    const B = 0.4;            // 1拍 = 0.4秒 → BPM150
-    const loopDur = B * 64;  // 64拍 = 25.6秒
-
-    function scheduleLoop(startAt) {
-      if (currentTrack !== 'battle') return;
-      const t0 = startAt || (ac.currentTime + 0.05);
-
-      // === ドライビングベース（8分音符でオクターブパンプ）===
-      const bassNotes = [
-        // --- セクションA (0-15): Dm→Bb→C→A/Dm ---
-        { f: 73.42, t: 0 }, { f: 146.83, t: 1 }, { f: 73.42, t: 2 }, { f: 146.83, t: 3 },
-        { f: 58.27, t: 4 }, { f: 116.54, t: 5 }, { f: 58.27, t: 6 }, { f: 116.54, t: 7 },
-        { f: 65.41, t: 8 }, { f: 130.81, t: 9 }, { f: 65.41, t: 10 }, { f: 130.81, t: 11 },
-        { f: 55.00, t: 12 }, { f: 110.00, t: 13 }, { f: 73.42, t: 14 }, { f: 146.83, t: 15 },
-        // --- セクションB (16-31): Gm→Eb→F→Dm (転調感) ---
-        { f: 97.99, t: 16 }, { f: 195.99, t: 17 }, { f: 97.99, t: 18 }, { f: 195.99, t: 19 },
-        { f: 77.78, t: 20 }, { f: 155.56, t: 21 }, { f: 77.78, t: 22 }, { f: 155.56, t: 23 },
-        { f: 87.31, t: 24 }, { f: 174.61, t: 25 }, { f: 87.31, t: 26 }, { f: 174.61, t: 27 },
-        { f: 73.42, t: 28 }, { f: 146.83, t: 29 }, { f: 73.42, t: 30 }, { f: 146.83, t: 31 },
-        // --- セクションC (32-47): Bb→C→Dm→A (ブレイク→ビルド) ---
-        { f: 58.27, t: 32 }, { f: 116.54, t: 33 }, { f: 58.27, t: 34 }, { f: 116.54, t: 35 },
-        { f: 65.41, t: 36 }, { f: 130.81, t: 37 }, { f: 65.41, t: 38 }, { f: 130.81, t: 39 },
-        { f: 73.42, t: 40 }, { f: 146.83, t: 41 }, { f: 73.42, t: 42 }, { f: 146.83, t: 43 },
-        { f: 55.00, t: 44 }, { f: 110.00, t: 45 }, { f: 55.00, t: 46 }, { f: 110.00, t: 47 },
-        // --- セクションD (48-63): Dm→Gm→Bb→C→Dm (クライマックス) ---
-        { f: 73.42, t: 48 }, { f: 146.83, t: 49 }, { f: 73.42, t: 50 }, { f: 146.83, t: 51 },
-        { f: 97.99, t: 52 }, { f: 195.99, t: 53 }, { f: 97.99, t: 54 }, { f: 195.99, t: 55 },
-        { f: 58.27, t: 56 }, { f: 116.54, t: 57 }, { f: 65.41, t: 58 }, { f: 130.81, t: 59 },
-        { f: 73.42, t: 60 }, { f: 146.83, t: 61 }, { f: 73.42, t: 62 }, { f: 146.83, t: 63 },
-      ];
-      bassNotes.forEach(n => {
-        note(ac, 'sine', n.f, t0 + n.t * B, B * 0.9, 0.12, dest);
-        note(ac, 'triangle', n.f * 2, t0 + n.t * B, B * 0.5, 0.04, dest);
-      });
-
-      // === パワーコード・ブラス ===
-      const chords = [
-        // --- セクションA ---
-        { notes: [293.66, 440.00], t: 0, d: 1.5 },
-        { notes: [293.66, 440.00], t: 3, d: 0.8 },
-        { notes: [233.08, 349.23], t: 4, d: 1.5 },
-        { notes: [233.08, 349.23], t: 7, d: 0.8 },
-        { notes: [261.63, 392.00], t: 8, d: 1.5 },
-        { notes: [261.63, 392.00], t: 11, d: 0.8 },
-        { notes: [220.00, 329.63], t: 12, d: 1.5 },
-        { notes: [293.66, 440.00], t: 14, d: 1.8 },
-        // --- セクションB ---
-        { notes: [196.00, 293.66], t: 16, d: 1.5 },    // Gm: G3+D4
-        { notes: [196.00, 293.66], t: 19, d: 0.8 },
-        { notes: [155.56, 233.08], t: 20, d: 1.5 },    // Eb: Eb3+Bb3
-        { notes: [155.56, 233.08], t: 23, d: 0.8 },
-        { notes: [174.61, 261.63], t: 24, d: 1.5 },    // F: F3+C4
-        { notes: [174.61, 261.63], t: 27, d: 0.8 },
-        { notes: [293.66, 440.00], t: 28, d: 1.5 },    // Dm
-        { notes: [293.66, 440.00], t: 30, d: 1.8 },
-        // --- セクションC (ブレイク: コード控えめ、ロングトーン) ---
-        { notes: [233.08, 349.23], t: 32, d: 3.5 },    // Bb ロング
-        { notes: [261.63, 392.00], t: 36, d: 3.5 },    // C ロング
-        { notes: [293.66, 440.00], t: 40, d: 3.5 },    // Dm ロング
-        { notes: [220.00, 329.63], t: 44, d: 3.5 },    // Am ロング
-        // --- セクションD (クライマックス: 密度高め) ---
-        { notes: [293.66, 440.00], t: 48, d: 1.5 },
-        { notes: [293.66, 440.00], t: 50, d: 0.8 },
-        { notes: [293.66, 440.00], t: 51, d: 0.8 },
-        { notes: [196.00, 293.66], t: 52, d: 1.5 },
-        { notes: [196.00, 293.66], t: 54, d: 0.8 },
-        { notes: [196.00, 293.66], t: 55, d: 0.8 },
-        { notes: [233.08, 349.23], t: 56, d: 0.8 },
-        { notes: [261.63, 392.00], t: 57, d: 0.8 },
-        { notes: [233.08, 349.23], t: 58, d: 0.8 },
-        { notes: [261.63, 392.00], t: 59, d: 0.8 },
-        { notes: [293.66, 440.00], t: 60, d: 3.8 },    // Dm大解決
-      ];
-      chords.forEach(ch => {
-        ch.notes.forEach(f => {
-          note(ac, 'sawtooth', f, t0 + ch.t * B, ch.d * B, 0.035, lpf);
-        });
-      });
-
-      // === メロディ ===
-      const mel = [
-        // --- セクションA: 勇壮な主題 ---
-        { f: 587.33, t: 0,    d: 0.8 },    // D5
-        { f: 659.25, t: 1,    d: 0.8 },    // E5
-        { f: 698.46, t: 2,    d: 1.5 },    // F5
-        { f: 880.00, t: 3.5,  d: 0.5 },    // A5
-        { f: 783.99, t: 4,    d: 0.8 },    // G5
-        { f: 698.46, t: 5,    d: 0.8 },    // F5
-        { f: 587.33, t: 6,    d: 1.8 },    // D5
-        { f: 523.25, t: 8,    d: 0.5 },    // C5
-        { f: 587.33, t: 8.5,  d: 0.5 },    // D5
-        { f: 698.46, t: 9,    d: 0.5 },    // F5
-        { f: 880.00, t: 9.5,  d: 1.5 },    // A5
-        { f: 783.99, t: 11,   d: 1.0 },    // G5
-        { f: 698.46, t: 12,   d: 0.8 },    // F5
-        { f: 659.25, t: 13,   d: 0.8 },    // E5
-        { f: 587.33, t: 14,   d: 1.8 },    // D5
-
-        // --- セクションB: 応答フレーズ（高域で展開） ---
-        { f: 783.99, t: 16,   d: 0.8 },    // G5
-        { f: 880.00, t: 17,   d: 0.8 },    // A5
-        { f: 932.33, t: 18,   d: 1.5 },    // Bb5
-        { f: 1046.50, t: 19.5, d: 0.5 },   // C6
-        { f: 932.33, t: 20,   d: 0.8 },    // Bb5
-        { f: 783.99, t: 21,   d: 0.8 },    // G5
-        { f: 698.46, t: 22,   d: 1.8 },    // F5
-        { f: 880.00, t: 24,   d: 0.5 },    // A5
-        { f: 783.99, t: 24.5, d: 0.5 },    // G5
-        { f: 698.46, t: 25,   d: 0.5 },    // F5
-        { f: 587.33, t: 25.5, d: 1.5 },    // D5
-        { f: 659.25, t: 27,   d: 1.0 },    // E5
-        { f: 587.33, t: 28,   d: 0.8 },    // D5
-        { f: 523.25, t: 29,   d: 0.8 },    // C5
-        { f: 587.33, t: 30,   d: 1.8 },    // D5
-
-        // --- セクションC: ブレイク（音数少なめ、溜め） ---
-        { f: 466.16, t: 32,   d: 2.0 },    // Bb4 (低く)
-        { f: 523.25, t: 34,   d: 2.0 },    // C5
-        { f: 587.33, t: 36,   d: 1.0 },    // D5
-        { f: 698.46, t: 37,   d: 3.0 },    // F5 (ロング)
-        { f: 587.33, t: 40,   d: 1.0 },    // D5
-        { f: 659.25, t: 41,   d: 1.0 },    // E5
-        { f: 698.46, t: 42,   d: 1.0 },    // F5
-        { f: 783.99, t: 43,   d: 1.0 },    // G5 (上昇)
-        { f: 880.00, t: 44,   d: 1.0 },    // A5
-        { f: 932.33, t: 45,   d: 1.0 },    // Bb5
-        { f: 1046.50, t: 46,  d: 1.8 },    // C6 (頂点!)
-
-        // --- セクションD: クライマックス（最も激しく） ---
-        { f: 1174.66, t: 48,  d: 0.5 },    // D6
-        { f: 1046.50, t: 48.5, d: 0.5 },   // C6
-        { f: 880.00, t: 49,   d: 0.5 },    // A5
-        { f: 587.33, t: 49.5, d: 0.5 },    // D5
-        { f: 783.99, t: 50,   d: 0.8 },    // G5
-        { f: 880.00, t: 51,   d: 0.8 },    // A5
-        { f: 932.33, t: 52,   d: 0.5 },    // Bb5
-        { f: 1046.50, t: 52.5, d: 0.5 },   // C6
-        { f: 1174.66, t: 53,  d: 1.0 },    // D6
-        { f: 1046.50, t: 54,  d: 0.8 },    // C6
-        { f: 932.33, t: 55,   d: 0.8 },    // Bb5
-        { f: 880.00, t: 56,   d: 0.5 },    // A5
-        { f: 783.99, t: 56.5, d: 0.5 },    // G5
-        { f: 698.46, t: 57,   d: 0.5 },    // F5
-        { f: 659.25, t: 57.5, d: 0.5 },    // E5
-        { f: 587.33, t: 58,   d: 1.0 },    // D5
-        { f: 880.00, t: 59,   d: 1.0 },    // A5 (跳躍)
-        { f: 587.33, t: 60,   d: 3.8 },    // D5 (大解決ロングトーン)
-      ];
-      mel.forEach(n => {
-        const st = t0 + n.t * B;
-        const dur = n.d * B;
-        const o1 = ac.createOscillator();
-        const g1 = ac.createGain();
-        o1.type = 'square';
-        o1.frequency.value = n.f;
-        g1.gain.setValueAtTime(0, st);
-        g1.gain.linearRampToValueAtTime(0.055, st + 0.02);
-        g1.gain.setValueAtTime(0.055, st + dur * 0.6);
-        g1.gain.linearRampToValueAtTime(0, st + dur);
-        o1.connect(g1);
-        g1.connect(lpf);
-        o1.start(st);
-        o1.stop(st + dur + 0.05);
-        currentNodes.push(o1);
-      });
-
-      // === ティンパニ + スネア ===
-      for (let i = 0; i < 64; i++) {
-        const st = t0 + i * B;
-        // セクションCの前半(32-39)はキック控えめ
-        const isBreak = (i >= 32 && i < 40);
-        const kickVol = isBreak ? 0.06 : 0.14;
-
-        const ot = ac.createOscillator();
-        const gt = ac.createGain();
-        ot.type = 'sine';
-        ot.frequency.setValueAtTime(80, st);
-        ot.frequency.exponentialRampToValueAtTime(40, st + 0.12);
-        gt.gain.setValueAtTime(0, st);
-        gt.gain.linearRampToValueAtTime(kickVol, st + 0.004);
-        gt.gain.exponentialRampToValueAtTime(0.001, st + 0.25);
-        ot.connect(gt);
-        gt.connect(dest);
-        ot.start(st);
-        ot.stop(st + 0.3);
-        currentNodes.push(ot);
-
-        // スネア風（裏拍のみ、ブレイク中は休み）
-        if (i % 2 === 1 && !isBreak) {
-          const bufLen = ac.sampleRate * 0.08;
-          const noiseBuf = ac.createBuffer(1, bufLen, ac.sampleRate);
-          const data = noiseBuf.getChannelData(0);
-          for (let j = 0; j < bufLen; j++) data[j] = Math.random() * 2 - 1;
-          const ns = ac.createBufferSource();
-          ns.buffer = noiseBuf;
-          const ng = ac.createGain();
-          ng.gain.setValueAtTime(0, st);
-          ng.gain.linearRampToValueAtTime(0.1, st + 0.003);
-          ng.gain.exponentialRampToValueAtTime(0.001, st + 0.07);
-          ns.connect(ng);
-          ng.connect(hpf);
-          ns.start(st);
-          ns.stop(st + 0.1);
-          currentNodes.push(ns);
+// 光の粒バースト
+function makeBurster(scene) {
+  const parts = [];
+  return {
+    burst(pos, color, count = 24, speed = 3, life = 0.9, size = 0.35) {
+      for (let i = 0; i < count; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: glowTexture(), color: new THREE.Color(color), transparent: true,
+          blending: THREE.AdditiveBlending, depthWrite: false,
+        }));
+        s.position.copy(pos);
+        const sz = size * (0.5 + Math.random());
+        s.scale.set(sz, sz, 1);
+        const v = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).normalize().multiplyScalar(speed * (0.4 + Math.random() * 0.8));
+        scene.add(s);
+        parts.push({ s, v, life, age: 0 });
+      }
+    },
+    update(dt) {
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const p = parts[i];
+        p.age += dt;
+        p.s.position.addScaledVector(p.v, dt);
+        p.v.multiplyScalar(0.94);
+        p.v.y += dt * 0.8;
+        p.s.material.opacity = Math.max(0, 1 - p.age / p.life);
+        if (p.age >= p.life) {
+          scene.remove(p.s);
+          p.s.material.dispose();
+          parts.splice(i, 1);
         }
       }
+    },
+  };
+}
 
-      // === ハイハット風（8分音符刻み） ===
-      for (let i = 0; i < 128; i++) {
-        const st = t0 + i * B * 0.5;
-        const beat = Math.floor(i / 2);
-        const isBreak = (beat >= 32 && beat < 40);
-        // ブレイク中はハイハット音量下げ
-        const baseVol = isBreak ? 0.015 : ((i % 2 === 0) ? 0.04 : 0.025);
-        // セクションD(48-)で4分音符の頭にアクセント
-        const isClimax = (beat >= 48);
-        const vol = (isClimax && i % 4 === 0) ? 0.05 : baseVol;
+function hexCss(n) { return '#' + n.toString(16).padStart(6, '0'); }
+function mixHex(a, b, t) {
+  const ca = new THREE.Color(a), cb = new THREE.Color(b);
+  return '#' + ca.lerp(cb, t).getHexString();
+}
 
-        const bufLen = ac.sampleRate * 0.03;
-        const hhBuf = ac.createBuffer(1, bufLen, ac.sampleRate);
-        const hhData = hhBuf.getChannelData(0);
-        for (let j = 0; j < bufLen; j++) hhData[j] = Math.random() * 2 - 1;
-        const hh = ac.createBufferSource();
-        hh.buffer = hhBuf;
-        const hhg = ac.createGain();
-        hhg.gain.setValueAtTime(0, st);
-        hhg.gain.linearRampToValueAtTime(vol, st + 0.002);
-        hhg.gain.exponentialRampToValueAtTime(0.001, st + 0.025);
-        hh.connect(hhg);
-        hhg.connect(hpf);
-        hh.start(st);
-        hh.stop(st + 0.04);
-        currentNodes.push(hh);
+// ---------------- 孵化シーン ----------------
+function createHatchScene(attr) {
+  const col = ATTR[attr].color;
+  const scene = new THREE.Scene();
+  const bg = hexCss(ATTR[attr].fogColor);
+  scene.fog = new THREE.Fog(ATTR[attr].fogColor, 12, 40);
+  scene.add(buildSkyDome(mixHex(bg, '#000000', 0.4), mixHex(bg, '#1a1c2e', 0.5), '#05060a'));
+  createStarField(scene, 600);
+
+  const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(0, 0.9, 8.2);
+  camera.lookAt(0, 0.3, 0);
+
+  addLights(scene, col, { key: 0.9, rim: 3 });
+  const ground = buildGround(mixHex(bg, '#202233', 0.5), mixHex(col, '#000000', 0.6), 20);
+  ground.position.y = -1.75;
+  scene.add(ground);
+  const ped = buildPedestal(col, 1.5);
+  ped.position.y = -1.75;
+  scene.add(ped);
+  const shadow = buildContactShadow(3, 0.6);
+  shadow.position.y = -1.74;
+  scene.add(shadow);
+  const motes = buildMotes(col, 90, 14, 6);
+  motes.position.y = -1.7;
+  scene.add(motes);
+
+  const egg = buildEgg(attr);
+  scene.add(egg);
+  const fx = makeBurster(scene);
+
+  let shake = 0, progress = 0, hatched = false, flashT = 0;
+
+  return {
+    scene, camera,
+    onResize(W, H) { camera.setViewOffset(W, H, 0, H * 0.05, W, H); },
+    shake(i) { shake = Math.max(shake, i); },
+    setProgress(r) { progress = r; },
+    tap(quality) {
+      const pos = new THREE.Vector3(0, 0.4, 1.1);
+      if (quality === 'perfect') fx.burst(pos, '#fff3c9', 18, 3.4, 0.8, 0.35);
+      else if (quality === 'great') fx.burst(pos, col, 10, 2.6, 0.7, 0.3);
+    },
+    hatch() {
+      hatched = true;
+      flashT = 1;
+      fx.burst(new THREE.Vector3(0, 0, 0), col, 70, 6, 1.6, 0.6);
+      fx.burst(new THREE.Vector3(0, 0, 0), '#ffffff', 40, 4, 1.2, 0.4);
+    },
+    update(dt, t) {
+      const sway = Math.sin(t * 1.6);
+      if (!hatched) {
+        egg.rotation.z = sway * 0.12 + shake * Math.sin(t * 40) * 0.08;
+        egg.rotation.y = t * 0.25;
+        egg.position.y = 0.05 + Math.sin(t * 0.9) * 0.06;
+        shake *= Math.pow(0.02, dt);
+        egg.userData.glow.material.opacity = 0.2 + progress * 0.6 + Math.abs(sway) * 0.08;
+        egg.userData.shell.material.emissiveIntensity = 0.45 + progress * 0.9;
+        const cr = clamp((progress - 0.55) / 0.45, 0, 1);
+        egg.userData.cracks.forEach((c, i) => { c.material.opacity = clamp(cr * 6 - i, 0, 1); });
+      } else {
+        flashT = Math.max(0, flashT - dt * 1.4);
+        egg.scale.setScalar(Math.max(0.001, 1 + (1 - flashT) * 0.6));
+        egg.userData.shell.material.opacity = flashT;
+        egg.userData.shell.material.transparent = true;
+        egg.userData.glow.material.opacity = flashT * 1.2;
+        egg.userData.cracks.forEach(c => { c.material.opacity = flashT; });
       }
+      ped.userData.ring.material.opacity = 0.5 + progress * 0.5;
+      animateMotes(motes, t);
+      fx.update(dt);
+    },
+  };
+}
 
-      // 次のループを正確なタイミングでスケジュール
-      const nextStart = t0 + loopDur;
-      const delay = (nextStart - ac.currentTime - 0.3) * 1000;
-      setTimeout(() => scheduleLoop(nextStart), Math.max(0, delay));
-    }
-    scheduleLoop();
+// ---------------- 育成シーン ----------------
+function createRaiseScene(attr, stage, type) {
+  const col = ATTR[attr].color;
+  const bgHex = hexCss(ATTR[attr].raiseBg);
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(ATTR[attr].raiseBg, 14, 42);
+  scene.add(buildSkyDome(mixHex(bgHex, '#000000', 0.55), mixHex(bgHex, '#11131f', 0.3), '#050608'));
+
+  const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
+  // 幼体は寄り、成体は引きで全身を収める
+  const FRAMING = {
+    baby:  { pos: new THREE.Vector3(0, 1.1, 6.4), target: new THREE.Vector3(0, 0.35, 0) },
+    adult: { pos: new THREE.Vector3(0, 1.9, 10.2), target: new THREE.Vector3(0, 0.95, 0) },
+  };
+  const frame = f => {
+    camera.position.copy(f.pos);
+    if (controls) { controls.target.copy(f.target); controls.update(); }
+  };
+  let controls = null;
+  camera.position.copy(FRAMING[stage === 'adult' ? 'adult' : 'baby'].pos);
+
+  addLights(scene, col);
+  const ground = buildGround(mixHex(bgHex, '#1c1e2c', 0.4), mixHex(col, '#000000', 0.65), 24);
+  ground.position.y = -0.72;
+  scene.add(ground);
+  const ped = buildPedestal(col, 1.9);
+  ped.position.y = -0.72;
+  scene.add(ped);
+  const shadow = buildContactShadow(3.4, 0.6);
+  shadow.position.y = -0.71;
+  scene.add(shadow);
+  const motes = buildMotes(col, 120, 16, 7);
+  motes.position.y = -0.7;
+  scene.add(motes);
+  const fx = makeBurster(scene);
+
+  let dragon = buildDragon(attr, stage, type);
+  scene.add(dragon);
+
+  controls = new THREE.OrbitControls(camera, Stage.canvas);
+  controls.target.copy(FRAMING[stage === 'adult' ? 'adult' : 'baby'].target);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.enablePan = false;
+  controls.minDistance = 4;
+  controls.maxDistance = 16;
+  controls.maxPolarAngle = Math.PI * 0.52;
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 0.5;
+  controls.update();
+  let idleTimer = null;
+  const pauseAuto = () => {
+    controls.autoRotate = false;
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => { controls.autoRotate = true; }, 6000);
+  };
+  controls.addEventListener('start', pauseAuto);
+
+  let hop = 0, flash = 0;
+
+  return {
+    scene, camera,
+    onResize(W, H) {
+      // プロフィールカードとドックを避けてドラゴンを中央に
+      const card = document.querySelector('.profile');
+      const dock = document.querySelector('#screen-raise .dock');
+      const cardW = card ? card.getBoundingClientRect().right : 0;
+      const dockH = dock ? H - dock.getBoundingClientRect().top : 0;
+      camera.setViewOffset(W, H, -cardW * 0.5, dockH * 0.45, W, H);
+    },
+    react(mult) {
+      hop = 1;
+      fx.burst(new THREE.Vector3(0, 0.6, 0), mult >= 3 ? '#fff1c4' : col, 8 + mult * 8, 2.5 + mult, 0.9, 0.3);
+    },
+    setDragon(newStage, newType, evolve) {
+      scene.remove(dragon);
+      dragon.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+      dragon = buildDragon(attr, newStage, newType);
+      scene.add(dragon);
+      if (newStage !== stage) { stage = newStage; frame(FRAMING[stage === 'adult' ? 'adult' : 'baby']); }
+      if (evolve) {
+        flash = 1;
+        fx.burst(new THREE.Vector3(0, 0.8, 0), '#ffffff', 50, 5, 1.4, 0.5);
+        fx.burst(new THREE.Vector3(0, 0.8, 0), col, 60, 6, 1.6, 0.5);
+      }
+    },
+    update(dt, t) {
+      controls.update();
+      hop = Math.max(0, hop - dt * 2.6);
+      dragon.position.y = Math.sin(t * 0.8) * 0.1 + Math.sin(hop * Math.PI) * 0.35;
+      flash = Math.max(0, flash - dt * 0.8);
+      setDragonFlash(dragon, flash + hop * 0.25);
+      animateDragonParticles(dragon, t);
+      animateMotes(motes, t);
+      ped.userData.ring.material.opacity = 0.65 + Math.sin(t * 1.5) * 0.2;
+      fx.update(dt);
+    },
+    dispose() {
+      clearTimeout(idleTimer);
+      controls.dispose();
+    },
+  };
+}
+
+// ---------------- バトルシーン ----------------
+function createBattleScene(p, e) {
+  const scene = new THREE.Scene();
+  const bg = e.boss ? '#1c0810' : '#140c1c';
+  scene.fog = new THREE.Fog(new THREE.Color(bg), 13, 40);
+  scene.add(buildSkyDome(e.boss ? '#2a0a12' : '#1a1028', bg, '#050407'));
+
+  const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 200);
+  const big = p.stage === 'adult' || e.stage === 'adult';
+  const camBase = big ? new THREE.Vector3(0, 2.1, 11.2) : new THREE.Vector3(0, 1.5, 8.6);
+  const lookY = big ? 0.9 : 0.4;
+  camera.position.copy(camBase);
+  camera.lookAt(0, lookY, 0);
+
+  addLights(scene, '#ffffff', { rim: 0.6 });
+  const pRim = new THREE.PointLight(new THREE.Color(ATTR[p.attr].color), 2.2, 12);
+  pRim.position.set(-4, 3, -2.5);
+  scene.add(pRim);
+  const eRim = new THREE.PointLight(new THREE.Color(e.boss ? '#ff3a4a' : ATTR[e.attr].color), e.boss ? 3.2 : 2.2, 12);
+  eRim.position.set(4, 3, -2.5);
+  scene.add(eRim);
+
+  const ground = buildGround(e.boss ? '#2a1016' : '#1d1526', e.boss ? '#3a0f18' : '#2a1d36', 26);
+  ground.position.y = -0.72;
+  scene.add(ground);
+  const motes = buildMotes(e.boss ? '#ff6a4a' : '#ffb86b', 110, 20, 7);
+  motes.position.y = -0.7;
+  scene.add(motes);
+  const fx = makeBurster(scene);
+  const tw = makeTweener();
+
+  function makeFighter(info, x, facing, accent) {
+    const g = buildDragon(info.attr, info.stage, info.type);
+    if (info.stage === 'adult') g.scale.setScalar(info.boss ? 1.22 : 1.05);
+    else if (info.boss) g.scale.multiplyScalar(1.2);
+    g.rotation.y = facing;
+    scene.add(g);
+    const ped = buildPedestal(accent, 1.45);
+    ped.position.set(x, -0.72, 0);
+    scene.add(ped);
+    const sh = buildContactShadow(2.8, 0.55);
+    sh.position.set(x, -0.71, 0);
+    scene.add(sh);
+    return { g, ped, base: new THREE.Vector3(x, 0, 0), dir: Math.sign(-x), lunge: 0, knock: 0, side: 0, sink: 0, flash: 0, phase: Math.random() * 6 };
   }
+  const F = {
+    player: makeFighter(p, -2.9, 0.6, ATTR[p.attr].color),
+    enemy:  makeFighter(e, 2.9, -0.6, e.boss ? '#ff3a4a' : ATTR[e.attr].color),
+  };
 
-  function toggleMute() {
-    muted = !muted;
-    if (masterGain) masterGain.gain.value = muted ? 0 : VOLUME;
-    return muted;
-  }
+  const shield = new THREE.Mesh(
+    new THREE.SphereGeometry(1.5, 32, 16),
+    new THREE.MeshBasicMaterial({ color: 0x8fa8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+  );
+  shield.position.copy(F.player.base).add(new THREE.Vector3(0, 0.5, 0));
+  scene.add(shield);
+  let shieldTarget = 0, shakeAmt = 0;
 
-  function isMuted() { return muted; }
+  const centerOf = who => F[who].g.position.clone().add(new THREE.Vector3(0, F[who].g.userData.stage === 'adult' ? 1.0 : 0.5, 0));
 
-  return { playTitle, playRaise, playBattle, stop: stopAll, toggleMute, isMuted, getCtx };
-})();
+  return {
+    scene, camera,
+    onResize(W, H) {
+      // 上部HUDと下部コマンドの間に収まるよう、やや下へずらす
+      const hud = document.querySelector('.battle-hud');
+      const top = hud ? hud.getBoundingClientRect().bottom : H * 0.3;
+      camera.setViewOffset(W, H, 0, -(top - H * 0.18) * 0.5, W, H);
+    },
+    lunge(who) {
+      const f = F[who];
+      return tw.add(340, q => { f.lunge = Math.sin(easeOut(q) * Math.PI) * 1.3; });
+    },
+    hit(who, strong) {
+      const f = F[who];
+      f.flash = 1;
+      shakeAmt = Math.max(shakeAmt, strong ? 0.28 : 0.1);
+      fx.burst(centerOf(who), who === 'enemy' ? '#fff0c0' : '#ffb0b8', strong ? 26 : 12, strong ? 5 : 3.2, 0.6, 0.32);
+      return tw.add(320, q => { f.knock = Math.sin(q * Math.PI) * (strong ? 0.5 : 0.28); });
+    },
+    evade(who) {
+      const f = F[who];
+      return tw.add(420, q => { f.side = Math.sin(q * Math.PI) * 1.1; });
+    },
+    shield(on) { shieldTarget = on ? 0.22 : 0; },
+    heal(who) { fx.burst(centerOf(who), '#7dffbf', 26, 1.6, 1.1, 0.3); },
+    projectile(from, to, color) {
+      const a = centerOf(from), b = centerOf(to);
+      const orbs = [];
+      for (let i = 0; i < 7; i++) {
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: new THREE.Color(color), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+        const sz = 0.9 - i * 0.1;
+        s.scale.set(sz, sz, 1);
+        scene.add(s);
+        orbs.push(s);
+      }
+      return tw.add(460, q => {
+        orbs.forEach((s, i) => {
+          const qq = clamp(q - i * 0.035, 0, 1);
+          s.position.lerpVectors(a, b, easeOut(qq));
+          s.position.y += Math.sin(qq * Math.PI) * 1.1;
+          s.material.opacity = q >= 1 ? 0 : 1 - i * 0.12;
+        });
+        if (q >= 1) orbs.forEach(s => { scene.remove(s); s.material.dispose(); });
+      }).then(() => fx.burst(b, color, 40, 5.5, 0.9, 0.45));
+    },
+    charge(who, color) { fx.burst(centerOf(who), color, 20, 1.2, 0.8, 0.35); },
+    defeat(who) {
+      const f = F[who];
+      return tw.add(1100, q => { f.sink = easeOut(q); });
+    },
+    shake(a) { shakeAmt = Math.max(shakeAmt, a); },
+    screenPos(who) {
+      const v = centerOf(who).add(new THREE.Vector3(0, 0.6, 0)).project(camera);
+      return { x: (v.x + 1) / 2 * window.innerWidth, y: (1 - v.y) / 2 * window.innerHeight };
+    },
+    update(dt, t) {
+      tw.update();
+      Object.keys(F).forEach(k => {
+        const f = F[k];
+        f.flash = Math.max(0, f.flash - dt * 4);
+        f.g.position.set(
+          f.base.x + f.dir * (f.lunge - f.knock),
+          Math.sin(t * 1.2 + f.phase) * 0.1 - f.sink * 1.2,
+          f.base.z + f.side
+        );
+        f.g.rotation.z = f.sink * f.dir * -0.6;
+        setDragonFlash(f.g, f.flash);
+        animateDragonParticles(f.g, t);
+        f.ped.userData.ring.material.opacity = 0.6 + Math.sin(t * 2 + f.phase) * 0.25;
+      });
+      shield.material.opacity += (shieldTarget - shield.material.opacity) * Math.min(1, dt * 10);
+      shield.scale.setScalar(1 + Math.sin(t * 6) * 0.02);
+      shakeAmt *= Math.pow(0.004, dt);
+      camera.position.set(
+        camBase.x + Math.sin(t * 0.2) * 0.35 + (Math.random() - 0.5) * shakeAmt,
+        camBase.y + (Math.random() - 0.5) * shakeAmt,
+        camBase.z
+      );
+      camera.lookAt(0, lookY, 0);
+      animateMotes(motes, t);
+      fx.update(dt);
+    },
+  };
+}
 
 // ============================================================
 // 画面管理
 // ============================================================
 const screens = {};
-['select','hatch','raise','battle','record'].forEach(id => {
-  screens[id] = document.getElementById('screen-' + id);
-});
-const mainNav = document.getElementById('main-nav');
+['select', 'hatch', 'raise', 'battle', 'record'].forEach(id => { screens[id] = $('screen-' + id); });
+const mainNav = $('main-nav');
+let currentScreen = 'select';
 
 function showScreen(name) {
-  Object.keys(screens).forEach(k => screens[k].classList.remove('active'));
-  screens[name].classList.add('active');
+  if (currentScreen === 'battle' && name !== 'battle') abandonBattle();
+  currentScreen = name;
+  Object.keys(screens).forEach(k => screens[k].classList.toggle('active', k === name));
+  mainNav.classList.toggle('hidden', !['raise', 'battle', 'record'].includes(name));
+  document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.screen === name));
 
-  // BGM切り替え
-  if (name === 'select' || name === 'hatch') BGM.playTitle();
-  else if (name === 'raise' || name === 'record') BGM.playRaise();
-  else if (name === 'battle') BGM.playBattle();
-
-  // ナビ表示制御
-  const showNav = ['raise','battle','record'].includes(name);
-  mainNav.classList.toggle('hidden', !showNav);
-
-  // ナビハイライト
-  document.querySelectorAll('.nav-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.screen === name);
-  });
+  if (name === 'select') { Stage.clear(); Music.play('title'); }
+  else if (name === 'hatch') Music.play('hatch', { intensity: state.hatchPt / HATCH_MAX });
+  else if (name === 'raise' || name === 'record') Music.play('raise', { attr: state.attr, adult: state.stage === 'adult' });
 }
 
-// ============================================================
-// Three.js 共通ユーティリティ
-// ============================================================
-function hexToThreeColor(hex) {
-  return new THREE.Color(hex);
+function applyAttrTheme(attr) {
+  document.documentElement.style.setProperty('--current-attr', attr ? ATTR[attr].color : '#e6c47a');
 }
 
-function makeBox(w, h, d, color, emissiveHex, emissiveInt = 0.3) {
-  const geo = new THREE.BoxGeometry(w, h, d);
-  const mat = new THREE.MeshStandardMaterial({
-    color: hexToThreeColor(color),
-    emissive: hexToThreeColor(emissiveHex || color),
-    emissiveIntensity: emissiveInt,
-    metalness: 0.2,
-    roughness: 0.7,
-  });
-  return new THREE.Mesh(geo, mat);
-}
-function _makeMat(color, emissiveHex, emissiveInt, extra) {
-  return new THREE.MeshStandardMaterial(Object.assign({
-    color: hexToThreeColor(color),
-    emissive: hexToThreeColor(emissiveHex || color),
-    emissiveIntensity: emissiveInt,
-    metalness: 0.25,
-    roughness: 0.55,
-  }, extra || {}));
-}
-function makeSphere(r, color, emissiveHex, emissiveInt = 0.3, wSeg = 16, hSeg = 12) {
-  return new THREE.Mesh(new THREE.SphereGeometry(r, wSeg, hSeg), _makeMat(color, emissiveHex, emissiveInt));
-}
-function makeEllipsoid(rx, ry, rz, color, emissiveHex, emissiveInt = 0.3) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), _makeMat(color, emissiveHex, emissiveInt));
-  m.scale.set(rx, ry, rz);
-  return m;
-}
-function makeCylinder(rTop, rBot, h, color, emissiveHex, emissiveInt = 0.3, seg = 12) {
-  return new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, seg), _makeMat(color, emissiveHex, emissiveInt));
-}
-function makeCone(r, h, color, emissiveHex, emissiveInt = 0.3, seg = 10) {
-  return new THREE.Mesh(new THREE.ConeGeometry(r, h, seg), _makeMat(color, emissiveHex, emissiveInt));
-}
-function makeTorus(r, tube, color, emissiveHex, emissiveInt = 0.3) {
-  return new THREE.Mesh(new THREE.TorusGeometry(r, tube, 8, 16), _makeMat(color, emissiveHex, emissiveInt));
-}
-// コウモリ翼型のポリゴンメッシュを生成（ptsは2D座標配列、XY平面）
-function makeWingShape(pts, color, emissiveHex, emissiveInt = 0.3) {
-  const shape = new THREE.Shape();
-  shape.moveTo(pts[0][0], pts[0][1]);
-  for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i][0], pts[i][1]);
-  shape.closePath();
-  const geo = new THREE.ShapeGeometry(shape);
-  const mat = _makeMat(color, emissiveHex, emissiveInt);
-  mat.side = THREE.DoubleSide;
-  return new THREE.Mesh(geo, mat);
+function setSigil(el, attr) {
+  if (!el) return;
+  el.style.setProperty('--c', ATTR[attr].color);
+  el.innerHTML = `<svg><use href="#${ATTR_ICON[attr]}"/></svg>`;
 }
 
-// 共通: ドラゴンウイング構築（帆型翼膜 + 骨格スパー2本）
-function buildBatWing(g, side, cfg) {
-  const zB = -0.12, zM = -0.15;
-  // ポイント定義（右翼正x系）
-  const SH  = [0.6, 0.35];   // 肩
-  const EL  = [1.5, 1.2];    // 肘（上方に高く）
-  const TIP = [3.2, 1.9];    // 翼先端（高く遠く）
-  const SP2 = [2.8, 0.1];    // 第2スパー先端（下方外側）
-  const TRL = [0.6, -0.2];   // 体側下端
-
-  function addBone(p1, p2, rT, rB, col, em, emI) {
-    const dx = p2[0]-p1[0], dy = p2[1]-p1[1];
-    const len = Math.sqrt(dx*dx + dy*dy);
-    const b = makeCylinder(rT, rB, len, col, em, emI);
-    b.position.set(side*(p1[0]+p2[0])/2, (p1[1]+p2[1])/2, zB);
-    b.rotation.z = -side * Math.atan2(dx, dy);
-    g.add(b);
-  }
-  function addJoint(p, r, col, em, emI) {
-    const j = makeSphere(r, col, em, emI);
-    j.position.set(side*p[0], p[1], zB);
-    g.add(j);
-  }
-  // 骨格: 肩→肘（上腕）
-  addJoint(SH, 0.08, cfg.bc, cfg.be, cfg.bi);
-  addBone(SH, EL, 0.05, 0.04, cfg.bc, cfg.be, cfg.bi);
-  addJoint(EL, 0.06, cfg.bc, cfg.be, cfg.bi);
-  // 肘→先端（メインスパー）
-  addBone(EL, TIP, 0.04, 0.018, cfg.bc, cfg.be, cfg.bi);
-  // 肘→下スパー
-  addBone(EL, SP2, 0.03, 0.014, cfg.bc, cfg.be, cfg.bi);
-  // 肘の鉤爪
-  const claw = makeCone(0.025, 0.13, cfg.bc, cfg.be, 0.7);
-  claw.position.set(side*(EL[0]+0.08), EL[1]-0.06, zB);
-  claw.rotation.x = 0.4;
-  claw.rotation.z = side * 0.3;
-  g.add(claw);
-  // 翼膜（1枚の大きな帆型 + 下縁スカラップ）
-  const membrane = makeWingShape([
-    SH,                         // 肩
-    EL,                         // 肘
-    [2.3, 1.65],                // メインスパー中間
-    TIP,                        // 翼先端
-    [3.1, 1.2],                 // 先端下（スカラップ山）
-    [2.8, 0.55],                // スパー間（谷）
-    [3.0, 0.35],                // スカラップ山
-    SP2,                        // 第2スパー先端
-    [2.0, -0.15],               // 下縁外（谷）
-    [1.5, 0.05],                // スカラップ山
-    [1.0, -0.2],                // 下縁内（谷）
-    TRL,                        // 体側下端
-  ], cfg.mc, cfg.me, cfg.mi);
-  membrane.position.z = zM;
-  if (side < 0) membrane.scale.x = -1;
-  g.add(membrane);
-
-  return {
-    tip:   [side*TIP[0], TIP[1], zB-0.08],
-    sp2:   [side*SP2[0], SP2[1], zB-0.08],
-    elbow: [side*EL[0], EL[1], zB],
-  };
-}
-
-// 共通: 星空パーティクル
-function createStarField(scene, count = 400) {
-  const geo = new THREE.BufferGeometry();
-  const pos = new Float32Array(count * 3);
-  const palette = [0xffffff, 0xcfc9ff, 0xa8d8ff, 0xffd6e0, 0xb8ffec];
-  const colors = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    pos[i*3]   = (Math.random()-.5)*80;
-    pos[i*3+1] = (Math.random()-.5)*50;
-    pos[i*3+2] = (Math.random()-.5)*80;
-    const c = new THREE.Color(palette[Math.floor(Math.random()*palette.length)]);
-    colors[i*3]=c.r; colors[i*3+1]=c.g; colors[i*3+2]=c.b;
-  }
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
-  const mat = new THREE.PointsMaterial({
-    size: 0.15, vertexColors: true, transparent: true,
-    opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false,
-  });
-  const pts = new THREE.Points(geo, mat);
-  scene.add(pts);
-  return pts;
+let toastTimer = null;
+function toast(msg, kind = '') {
+  const el = $('action-feedback');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.className = 'toast' + (kind ? ' ' + kind : ''); }, 1500);
 }
 
 // ============================================================
-// Phase1: 属性選択画面
+// 属性選択
 // ============================================================
-document.querySelectorAll('.attr-card').forEach(card => {
-  card.addEventListener('click', () => {
+function initSelectScreen() {
+  document.querySelectorAll('[data-version]').forEach(el => { el.textContent = VERSION; });
+  const norm = { hp: 90, atk: 20, def: 18, spd: 22 };
+  document.querySelectorAll('.attr-card').forEach(card => {
     const attr = card.dataset.attr;
-    selectAttr(attr);
+    const box = card.querySelector('[data-mini-stats]');
+    const s = BASE_STATS[attr];
+    box.innerHTML = Object.keys(STAT_LABEL).map(k =>
+      `<span>${STAT_LABEL[k]}</span><i style="--w:${Math.round(Math.min(1, s[k] / norm[k]) * 100)}%"></i>`
+    ).join('');
+    card.addEventListener('click', () => { Music.unlock(); Music.sfx('select'); selectAttr(attr); });
   });
-});
+}
 
 function selectAttr(attr) {
+  const keepAuto = state.autoMode;
+  state = freshState();
   state.attr = attr;
-  state.stage = 'egg';
-  state.hatchPt = 0;
-  state.growthPt = 0;
-  state.stats = Object.assign({}, BASE_STATS[attr]);
-  state.score = 0;
-  state.streak = 0;
-  state.battleLevel = 1;
+  state.autoMode = keepAuto;
+  applyAttrTheme(attr);
+  saveGame();
+  enterHatch();
+}
 
-  // CSS変数のカラーを属性カラーに変更
-  document.documentElement.style.setProperty('--current-attr', ATTR[attr].color);
+// ============================================================
+// 孵化
+// ============================================================
+let hatchScene = null;
+let hatchCombo = 0;
+let hatching = false;
 
+function enterHatch() {
+  hatching = false;
+  hatchCombo = 0;
+  hatchScene = createHatchScene(state.attr);
+  Stage.set(hatchScene);
+  $('hatch-attr-label').textContent = ATTR[state.attr].name + 'の卵';
+  updateHatchUI();
   showScreen('hatch');
-  initHatchScene(attr);
+  requestAnimationFrame(animateTimingBar);
 }
 
-// ============================================================
-// Phase2: 孵化シーン（Three.js）
-// ============================================================
-let hatchScene, hatchCamera, hatchRenderer, hatchAnimId;
-let eggGroup = null;
-let eggCrackLines = [];
-let hatchParticles = [];
-let hatchIdleTimer = null;
-let hatchResizeHandler = null;
-
-function initHatchScene(attr) {
-  const canvas = document.getElementById('hatch-canvas');
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-
-  // 既存シーンがあれば破棄
-  if (hatchAnimId) { cancelAnimationFrame(hatchAnimId); hatchAnimId = null; }
-  if (hatchRenderer) { hatchRenderer.dispose(); }
-
-  hatchScene = new THREE.Scene();
-  hatchScene.fog = new THREE.FogExp2(ATTR[attr].fogColor, 0.025);
-
-  hatchCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
-  hatchCamera.position.set(0, 0, 8);
-
-  hatchRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  hatchRenderer.setSize(W, H);
-  hatchRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  hatchRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-  hatchRenderer.toneMappingExposure = 1.2;
-
-  // ライト
-  hatchScene.add(new THREE.AmbientLight(0x334466, 0.8));
-  const pt = new THREE.PointLight(hexToThreeColor(ATTR[attr].color), 2.0, 20);
-  pt.position.set(0, 3, 5);
-  hatchScene.add(pt);
-  const pt2 = new THREE.PointLight(0x223366, 0.6, 20);
-  pt2.position.set(0, -4, -5);
-  hatchScene.add(pt2);
-
-  createStarField(hatchScene);
-  buildEgg(attr);
-  updateHatchLabel(attr);
-  updateHatchGaugeUI();
-  animateHatch();
-
-  // 放置タイマー開始
-  clearInterval(hatchIdleTimer);
-  hatchIdleTimer = setInterval(() => {
-    if (state.stage === 'egg') addHatchPt(1);
-  }, HATCH_IDLE);
-
-  // クリックで孵化促進（タイミング判定）
-  canvas.onclick = () => {
-    if (state.stage !== 'egg') return;
-    const pts = evalHatchTiming();
-    addHatchPt(pts);
-    shakeEgg(pts >= 8 ? 0.6 : 0.3);
-  };
-
-  if (hatchResizeHandler) window.removeEventListener('resize', hatchResizeHandler);
-  hatchResizeHandler = () => {
-    if (!hatchRenderer || !hatchCamera) return;
-    requestAnimationFrame(() => {
-      const W2 = canvas.clientWidth  || window.innerWidth;
-      const H2 = canvas.clientHeight || window.innerHeight;
-      if (W2 === 0 || H2 === 0) return;
-      hatchCamera.aspect = W2 / H2;
-      hatchCamera.updateProjectionMatrix();
-      hatchRenderer.setSize(W2, H2);
-    });
-  };
-  window.addEventListener('resize', hatchResizeHandler);
+function animateTimingBar() {
+  if (currentScreen !== 'hatch') return;
+  const sway = Math.abs(Math.sin(performance.now() * 0.001 * 1.6));
+  $('hatch-timing-bar').style.left = (sway * 100) + '%';
+  requestAnimationFrame(animateTimingBar);
 }
 
-function updateHatchLabel(attr) {
-  const el = document.getElementById('hatch-attr-label');
-  if (el) el.textContent = ATTR[attr].name + ' の卵';
-}
-
-// ---- ボクセル卵 ----
-function buildEgg(attr) {
-  if (eggGroup) hatchScene.remove(eggGroup);
-  eggGroup = new THREE.Group();
-  eggCrackLines = [];
-
-  const c  = ATTR[attr].color;
-  const em = ATTR[attr].emissive;
-
-  // 卵の形：BoxGeometryを積み上げて楕円形に近づける
-  const layers = [
-    { y: -1.2, w: 0.8, h: 0.4, d: 0.8 },
-    { y: -0.8, w: 1.3, h: 0.4, d: 1.3 },
-    { y: -0.4, w: 1.6, h: 0.4, d: 1.6 },
-    { y:  0.0, w: 1.7, h: 0.4, d: 1.7 },
-    { y:  0.4, w: 1.6, h: 0.4, d: 1.6 },
-    { y:  0.8, w: 1.3, h: 0.4, d: 1.3 },
-    { y:  1.2, w: 0.9, h: 0.4, d: 0.9 },
-    { y:  1.5, w: 0.5, h: 0.35,d: 0.5 },
-  ];
-
-  layers.forEach(l => {
-    const m = makeBox(l.w, l.h, l.d, '#1a1a2e', em, 0.1);
-    m.position.y = l.y;
-    eggGroup.add(m);
-  });
-
-  // 表面模様（属性カラーのボクセルをランダムに配置）
-  for (let i = 0; i < 14; i++) {
-    const size = 0.18 + Math.random() * 0.14;
-    const dot = makeBox(size, size, size * 0.3, c, em, 0.6);
-    const angle = Math.random() * Math.PI * 2;
-    const r = 0.8 + Math.random() * 0.7;
-    const yp = -1.0 + Math.random() * 2.2;
-    dot.position.set(Math.cos(angle)*r, yp, Math.sin(angle)*r);
-    dot.rotation.y = angle;
-    eggGroup.add(dot);
-  }
-
-  // ひびメッシュ（最初は非表示）
-  for (let i = 0; i < 5; i++) {
-    const cGeo = new THREE.BoxGeometry(0.05, 0.5 + Math.random()*0.4, 0.05);
-    const cMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
-    const crack = new THREE.Mesh(cGeo, cMat);
-    const angle = (i / 5) * Math.PI * 2 + Math.random() * 0.5;
-    crack.position.set(Math.cos(angle)*1.6, -0.3 + Math.random()*1.0, Math.sin(angle)*1.6);
-    crack.rotation.z = (Math.random()-.5) * 0.5;
-    eggGroup.add(crack);
-    eggCrackLines.push(crack);
-  }
-
-  hatchScene.add(eggGroup);
-}
-
-// 揺らす
-let eggShake = 0;
-function shakeEgg(intensity) { eggShake = intensity; }
-
-// ---- タイミング判定 ----
-// 卵の揺れ量(swayBase = sin(t*1.6))のピーク時にタップするとPERFECT
+// 卵の揺れ(|sin|)のピーク付近でタップすると PERFECT
 function evalHatchTiming() {
-  const t = performance.now() * 0.001;
-  const sway = Math.abs(Math.sin(t * 1.6)); // 0〜1、1がピーク
-  let pts, label, cls;
-  if (sway >= 0.85) {
-    pts = 10; label = 'PERFECT!! ✨'; cls = 'tap-perfect';
-  } else if (sway >= 0.55) {
-    pts = 5;  label = 'GREAT! 🔥';    cls = 'tap-great';
-  } else {
-    pts = 2;  label = 'TAP';           cls = 'tap-normal';
-  }
-  showTapResult(label, cls);
-  return pts;
+  const sway = Math.abs(Math.sin(performance.now() * 0.001 * 1.6));
+  if (sway >= 0.85) return 'perfect';
+  if (sway >= 0.55) return 'great';
+  return 'normal';
 }
 
-function showTapResult(label, cls) {
-  const el = document.getElementById('hatch-tap-result');
-  if (!el) return;
+function onHatchTap() {
+  if (state.stage !== 'egg' || hatching) return;
+  Music.unlock();
+  const q = evalHatchTiming();
+  let pts;
+  if (q === 'perfect') { hatchCombo++; pts = 9 + Math.min(hatchCombo - 1, 3) * 2; }
+  else if (q === 'great') { hatchCombo = 0; pts = 5; }
+  else { hatchCombo = 0; pts = 2; }
+  const label = q === 'perfect' ? (hatchCombo > 1 ? `PERFECT ×${hatchCombo}` : 'PERFECT') : q === 'great' ? 'GREAT' : 'TAP';
+  const el = $('hatch-tap-result');
   el.textContent = label;
-  el.className = 'hatch-tap-result ' + cls;
-  el.style.opacity = '1';
-  clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.opacity = '0'; }, 700);
+  el.className = 'tap-result tap-' + q;
+  void el.offsetWidth;
+  el.classList.add('show');
+  Music.sfx('tap', { quality: q });
+  hatchScene.shake(q === 'perfect' ? 1 : q === 'great' ? 0.6 : 0.3);
+  hatchScene.tap(q);
+  addHatchPt(pts);
 }
 
-// ひびをゲージに応じて表示
-function updateCracks(ratio) {
-  if (ratio < 0.8) return;
-  const t = (ratio - 0.8) / 0.2; // 0.8〜1.0 → 0〜1
-  eggCrackLines.forEach((cl, i) => {
-    cl.material.opacity = t * (0.5 + (i%3)*0.2);
-  });
-}
-
-// ---- 孵化ゲージ ----
 function addHatchPt(pt) {
-  state.hatchPt = Math.min(state.hatchPt + pt, HATCH_MAX);
-  updateHatchGaugeUI();
-  updateCracks(state.hatchPt / HATCH_MAX);
+  if (state.stage !== 'egg') return;
+  state.hatchPt = Math.min(HATCH_MAX, state.hatchPt + pt);
+  updateHatchUI();
   if (state.hatchPt >= HATCH_MAX) doHatch();
+  else saveGame();
 }
 
-function updateHatchGaugeUI() {
-  const fill = document.getElementById('hatch-gauge-fill');
-  const text = document.getElementById('hatch-gauge-text');
-  if (fill) fill.style.width = (state.hatchPt / HATCH_MAX * 100) + '%';
-  if (text) text.textContent = `${state.hatchPt} / ${HATCH_MAX}`;
+function updateHatchUI() {
+  const r = state.hatchPt / HATCH_MAX;
+  $('hatch-gauge-fill').style.width = (r * 100) + '%';
+  $('hatch-gauge-text').textContent = Math.floor(r * 100) + '%';
+  if (hatchScene) hatchScene.setProgress(r);
+  if (currentScreen === 'hatch') Music.set({ intensity: r });
 }
 
-// ---- 孵化演出 → 育成画面へ ----
 function doHatch() {
-  clearInterval(hatchIdleTimer);
-  state.stage = 'baby';
-  // ひびを全部表示
-  eggCrackLines.forEach(cl => { cl.material.opacity = 1; });
-  // パーティクル爆発
-  spawnHatchParticles();
-  // 少し待って育成画面へ
-  setTimeout(() => {
-    showScreen('raise');
-    mainNav.classList.remove('hidden');
-    initRaiseScene(state.attr);
-    saveGame();
-  }, 1800);
-}
-
-// 孵化パーティクル
-function spawnHatchParticles() {
-  const c = hexToThreeColor(ATTR[state.attr].color);
-  for (let i = 0; i < 60; i++) {
-    const geo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-    const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 1 });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(0, 0, 0);
-    const vel = new THREE.Vector3(
-      (Math.random()-.5)*4,
-      (Math.random()-.5)*4,
-      (Math.random()-.5)*4
-    );
-    hatchScene.add(mesh);
-    hatchParticles.push({ mesh, vel, life: 0 });
-  }
-}
-
-// ---- 孵化シーンアニメーション ----
-function animateHatch() {
-  hatchAnimId = requestAnimationFrame(animateHatch);
-  const t = performance.now() * 0.001;
-
-  if (eggGroup) {
-    // ゆりかごアニメーション
-    const swayBase = Math.sin(t * 1.6) * 0.08;
-    eggGroup.rotation.z = swayBase + eggShake * Math.sin(t * 12);
-    eggGroup.position.y = Math.sin(t * 0.9) * 0.08;
-    eggShake *= 0.88;
-    eggGroup.rotation.y = t * 0.2;
-  }
-
-  // 孵化タイミングバーを卵の揺れに同期して動かす
-  const barEl = document.getElementById('hatch-timing-bar');
-  if (barEl) {
-    // sin(t*1.6) を 0〜1 に正規化 → バーのleft位置に変換
-    const norm = (Math.sin(t * 1.6) + 1) / 2; // 0〜1
-    const wrapW = 260;
-    const barW  = 6;
-    barEl.style.left = (norm * (wrapW - barW)) + 'px';
-  }
-
-  // パーティクル更新
-  for (let i = hatchParticles.length - 1; i >= 0; i--) {
-    const p = hatchParticles[i];
-    p.life += 0.035;
-    p.mesh.position.addScaledVector(p.vel, 0.04);
-    p.mesh.material.opacity = Math.max(0, 1 - p.life);
-    if (p.life >= 1) {
-      hatchScene.remove(p.mesh);
-      hatchParticles.splice(i, 1);
-    }
-  }
-
-  hatchRenderer.render(hatchScene, hatchCamera);
-}
-
-// ============================================================
-// Phase3 + Phase4: 育成シーン（Three.js）
-// ============================================================
-let raiseScene, raiseCamera, raiseRenderer, raiseAnimId, raiseControls;
-let dragonGroup = null;
-let attrEffectParticles = [];
-let raiseIdleTimer = null;
-let staCountdownTimer = null;
-let staNextRecovery = 0; // 次回スタミナ回復の予定時刻(ms)
-let raiseResizeHandler = null; // resizeリスナ管理用
-
-function initRaiseScene(attr) {
-  const canvas = document.getElementById('raise-canvas');
-
-  if (raiseAnimId) { cancelAnimationFrame(raiseAnimId); raiseAnimId = null; }
-  if (raiseRenderer) { raiseRenderer.dispose(); }
-
-  // CSS レイアウト確定後にキャンバスサイズを取得
-  requestAnimationFrame(() => {
-    const W = canvas.clientWidth  || window.innerWidth;
-    const H = canvas.clientHeight || window.innerHeight;
-
-  raiseScene = new THREE.Scene();
-  raiseScene.background = new THREE.Color(ATTR[attr].raiseBg);
-  raiseScene.fog = new THREE.FogExp2(ATTR[attr].raiseBg, 0.018);
-
-  raiseCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
-  raiseCamera.position.set(0, 1.2, 5.5);
-  raiseCamera.lookAt(0, 0.8, 0);
-
-  raiseRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  raiseRenderer.setSize(W, H, false);
-  raiseRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-
-  // ライト（明るめ）
-  raiseScene.add(new THREE.AmbientLight(0x889aaa, 1.2));
-  const hemi = new THREE.HemisphereLight(0xddeeff, 0x445566, 0.8);
-  raiseScene.add(hemi);
-  const spot = new THREE.SpotLight(hexToThreeColor(ATTR[attr].color), 2.5, 30, Math.PI/5, 0.5);
-  spot.position.set(0, 10, 6);
-  spot.castShadow = true;
-  raiseScene.add(spot);
-  const pt = new THREE.PointLight(0x556688, 0.8, 20);
-  pt.position.set(-5, 2, -3);
-  raiseScene.add(pt);
-
-  // 地面
-  const groundGeo = new THREE.PlaneGeometry(60, 60);
-  const groundMat = new THREE.MeshStandardMaterial({ color: ATTR[attr].raiseBg, roughness: 0.9, metalness: 0.1 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -0.7;
-  raiseScene.add(ground);
-  buildDragonModel(attr, state.stage);
-  updateRaiseUI();
-  animateRaise();
-
-  // 放置タイマー（成長）
-  clearInterval(raiseIdleTimer);
-  raiseIdleTimer = setInterval(() => {
-    if (state.stage === 'baby') addGrowthPt(1);
-  }, RAISE_IDLE);
-
-  // スタミナ回復タイマー（1秒ごとに回復判定＋カウントダウン表示を両方処理）
-  clearInterval(staCountdownTimer);
-  if (state.stamina < STA_MAX && staNextRecovery === 0) {
-    staNextRecovery = Date.now() + STA_RECOVER_MS;
-  }
-  staCountdownTimer = setInterval(() => {
-    const timeEl = document.getElementById('sta-recover-time');
-    if (state.stamina >= STA_MAX) {
-      staNextRecovery = 0;
-      if (timeEl) timeEl.textContent = '';
-      return;
-    }
-    // 回復時刻に達していたらスタミナを回復
-    if (staNextRecovery > 0 && Date.now() >= staNextRecovery) {
-      state.stamina = Math.min(STA_MAX, state.stamina + 1);
-      staNextRecovery = state.stamina < STA_MAX ? Date.now() + STA_RECOVER_MS : 0;
-      updateStaminaUI();
-      saveGame();
-    }
-    // カウントダウン表示
-    if (timeEl) {
-      const rem = Math.max(0, Math.ceil((staNextRecovery - Date.now()) / 1000));
-      timeEl.textContent = state.stamina >= STA_MAX ? '' : `${rem}s`;
-    }
-  }, 1000);
-
-  setupRaiseButtons(attr);
-  updateRaiseUI();
-
-  // 旧リスナを必ず削除してから再登録（重複覄積を防ぐ）
-  if (raiseResizeHandler) window.removeEventListener('resize', raiseResizeHandler);
-  raiseResizeHandler = () => {
-    if (!raiseRenderer || !raiseCamera) return;
-    requestAnimationFrame(() => {
-      const W2 = window.innerWidth;
-      const H2 = window.innerHeight;
-      if (W2 === 0 || H2 === 0) return;
-      raiseCamera.aspect = W2 / H2;
-      raiseCamera.updateProjectionMatrix();
-      raiseRenderer.setSize(W2, H2, false);
-    });
-  };
-  window.addEventListener('resize', raiseResizeHandler);
-
-  // OrbitControlsで360度回転
-  if (raiseControls) raiseControls.dispose();
-  raiseControls = new THREE.OrbitControls(raiseCamera, canvas);
-  raiseControls.target.set(0, 0.8, 0);
-  raiseControls.enableDamping = true;
-  raiseControls.dampingFactor = 0.08;
-  raiseControls.enablePan = false;
-  raiseControls.minDistance = 4;
-  raiseControls.maxDistance = 20;
-  raiseControls.maxPolarAngle = Math.PI * 0.85;
-  raiseControls.update();
-
-  }); // requestAnimationFrame end
-}
-
-// ---- ドラゴンモデル（スムーズ） ----
-function buildDragonModel(attr, stage) {
-  if (dragonGroup) raiseScene.remove(dragonGroup);
-  attrEffectParticles = [];
-  dragonGroup = stage === 'baby'
-    ? buildBabyDragon(attr)
-    : buildAdultDragon(attr);
-  if (stage === 'baby') dragonGroup.scale.multiplyScalar(0.65);
-  raiseScene.add(dragonGroup);
-}
-
-// 幼体：まんまるスムーズちびドラゴン（属性別デザイン）
-function buildBabyDragon(attr) {
-  const g = new THREE.Group();
-  const c  = ATTR[attr].color;
-  const em = ATTR[attr].emissive;
-  const bodyColor = '#1a2a1a';
-
-  // ===== 属性別ユニーク体型（氷=ゴジラ、雷=ペガサス、闇=フード怪獣） =====
-
-  // === 氷ベビー：チビゴジラ（二足歩行怪獣） ===
-  if (attr === 'ice') {
-    // 直立ボディ（ゴジラ体型：上半身が大きく下半身で支える）
-    const torso = makeEllipsoid(0.7, 0.9, 0.6, bodyColor, em, 0.15);
-    g.add(torso);
-    const bellyPlate = makeEllipsoid(0.45, 0.65, 0.3, '#2a3a2a', em, 0.1);
-    bellyPlate.position.set(0, -0.05, 0.35);
-    g.add(bellyPlate);
-
-    // 頭（ゴジラ風・角張った大きめ頭部）
-    const skull = makeEllipsoid(0.55, 0.5, 0.55, bodyColor, em, 0.15);
-    skull.position.set(0, 1.1, 0.1);
-    g.add(skull);
-    // 吻部（ゴジラのマズル — 前に長い）
-    const snout = makeEllipsoid(0.35, 0.3, 0.4, bodyColor, em, 0.15);
-    snout.position.set(0, 0.95, 0.5);
-    g.add(snout);
-    // 下顎
-    const jaw = makeEllipsoid(0.3, 0.15, 0.35, bodyColor, em, 0.15);
-    jaw.position.set(0, 0.78, 0.5);
-    g.add(jaw);
-
-    // 目（小さく鋭い — ゴジラの怒り目）
-    [[-0.25, 0], [0.25, 0]].forEach(([x]) => {
-      const eyeW = makeSphere(0.12, '#ffffff', '#ffffff', 0.3);
-      eyeW.position.set(x, 1.15, 0.45);
-      g.add(eyeW);
-      const iris = makeSphere(0.08, '#111111', '#000000', 0);
-      iris.position.set(x, 1.14, 0.53);
-      g.add(iris);
-      const hl = makeSphere(0.03, '#ffffff', '#ffffff', 1.0);
-      hl.position.set(x + 0.03, 1.18, 0.55);
-      g.add(hl);
-    });
-
-    // 鼻孔
-    [[-0.08, 0], [0.08, 0]].forEach(([x]) => {
-      const n = makeSphere(0.04, c, em, 0.4);
-      n.position.set(x, 0.95, 0.82);
-      g.add(n);
-    });
-
-    // 小さな歯（口から覗く）
-    [[-0.12, 0.85, 0.72], [0.12, 0.85, 0.72], [0, 0.85, 0.78]].forEach(([x,y,z]) => {
-      const tooth = makeCone(0.025, 0.08, '#e8e8e8', '#ffffff', 0.3);
-      tooth.position.set(x, y, z);
-      tooth.rotation.x = Math.PI;
-      g.add(tooth);
-    });
-
-    // 二本の太い脚（二足歩行 — ゴジラの力強い脚）
-    [[-0.35, 0], [0.35, 0]].forEach(([x]) => {
-      const thigh = makeEllipsoid(0.28, 0.35, 0.28, bodyColor, em, 0.1);
-      thigh.position.set(x, -0.7, 0);
-      g.add(thigh);
-      const foot = makeEllipsoid(0.25, 0.1, 0.3, bodyColor, em, 0.12);
-      foot.position.set(x, -1.05, 0.1);
-      g.add(foot);
-      // 三本指
-      for (let t = 0; t < 3; t++) {
-        const toe = makeSphere(0.07, c, em, 0.3);
-        toe.position.set(x + (t-1)*0.12, -1.1, 0.35);
-        g.add(toe);
-      }
-    });
-
-    // 小さな腕（T-レックス風の短い前肢）
-    [[-0.55, 0], [0.55, 0]].forEach(([x]) => {
-      const arm = makeEllipsoid(0.12, 0.18, 0.1, bodyColor, em, 0.1);
-      arm.position.set(x, 0.15, 0.35);
-      arm.rotation.z = x < 0 ? 0.4 : -0.4;
-      g.add(arm);
-      const cl = makeSphere(0.05, c, em, 0.3);
-      cl.position.set(x + (x<0 ? -0.08 : 0.08), 0.02, 0.4);
-      g.add(cl);
-    });
-
-    // 背びれ（氷の結晶ドーサルプレート — ゴジラのトレードマーク）
-    for (let i = 0; i < 5; i++) {
-      const pH = 0.15 + Math.sin(i / 4 * Math.PI) * 0.15;
-      const plate = makeCone(0.06, pH, c, em, 0.8);
-      plate.position.set(0, 1.2 - i * 0.35, -0.25 - i * 0.05);
-      g.add(plate);
-      if (i > 0 && i < 4) {
-        [[-0.08, 0], [0.08, 0]].forEach(([sx]) => {
-          const sp = makeCone(0.03, pH * 0.5, '#ffffff', '#aaddff', 0.9);
-          sp.position.set(sx, 1.15 - i * 0.35, -0.3 - i * 0.05);
-          g.add(sp);
-        });
-      }
-    }
-
-    // 尻尾（太くて重い — ゴジラの重量感）
-    const t1 = makeSphere(0.25, bodyColor, em, 0.1);
-    t1.position.set(0, -0.4, -0.6);
-    g.add(t1);
-    const t2 = makeSphere(0.18, bodyColor, em, 0.1);
-    t2.position.set(0, -0.55, -1.0);
-    g.add(t2);
-    const t3 = makeSphere(0.12, bodyColor, em, 0.1);
-    t3.position.set(0, -0.65, -1.35);
-    g.add(t3);
-    const tailTip = makeCone(0.06, 0.15, c, em, 1.0);
-    tailTip.position.set(0, -0.6, -1.5);
-    tailTip.rotation.x = 0.5;
-    g.add(tailTip);
-
-    addAttrEffect(g, attr, 'baby');
-    return g;
-  }
-
-  // === 雷ベビー：チビペガサス（翼のある馬＋角から雷撃） ===
-  if (attr === 'thunder') {
-    // 馬体（横長の丸い体）
-    const torso = makeEllipsoid(0.5, 0.5, 0.9, bodyColor, em, 0.15);
-    g.add(torso);
-    const bellyP = makeEllipsoid(0.35, 0.35, 0.6, '#2a3a2a', em, 0.1);
-    bellyP.position.set(0, -0.15, 0);
-    g.add(bellyP);
-
-    // 首（斜め上に伸びる）
-    const neck = makeEllipsoid(0.25, 0.35, 0.25, bodyColor, em, 0.15);
-    neck.position.set(0, 0.5, 0.55);
-    neck.rotation.x = -0.3;
-    g.add(neck);
-
-    // 頭（馬顔・丸くて可愛い）
-    const head = makeEllipsoid(0.35, 0.4, 0.5, bodyColor, em, 0.15);
-    head.position.set(0, 1.0, 0.65);
-    g.add(head);
-    // マズル
-    const muzzle = makeEllipsoid(0.2, 0.2, 0.35, bodyColor, em, 0.12);
-    muzzle.position.set(0, 0.85, 1.0);
-    g.add(muzzle);
-
-    // 鼻孔
-    [[-0.08, 0], [0.08, 0]].forEach(([x]) => {
-      const n = makeSphere(0.04, c, em, 0.5);
-      n.position.set(x, 0.82, 1.28);
-      g.add(n);
-    });
-
-    // 目（大きくてかわいい）
-    [[-0.22, 0], [0.22, 0]].forEach(([x]) => {
-      const eyeW = makeSphere(0.15, '#ffffff', '#ffffff', 0.3);
-      eyeW.position.set(x, 1.1, 0.85);
-      g.add(eyeW);
-      const iris = makeSphere(0.1, '#111111', '#000000', 0);
-      iris.position.set(x, 1.1, 0.93);
-      g.add(iris);
-      const hl = makeSphere(0.04, '#ffffff', '#ffffff', 1.0);
-      hl.position.set(x + 0.04, 1.15, 0.96);
-      g.add(hl);
-    });
-
-    // 耳（馬耳 — とがった）
-    [[-0.15, 0], [0.15, 0]].forEach(([x]) => {
-      const ear = makeCone(0.06, 0.2, bodyColor, em, 0.15);
-      ear.position.set(x, 1.35, 0.55);
-      ear.rotation.z = x < 0 ? 0.2 : -0.2;
-      g.add(ear);
-    });
-
-    // 角（一角獣の角 — 雷撃の源）
-    const horn = makeCone(0.05, 0.4, c, em, 1.0);
-    horn.position.set(0, 1.4, 0.7);
-    horn.rotation.x = -0.3;
-    g.add(horn);
-    const hornSpark = makeSphere(0.04, '#ffffff', c, 1.3);
-    hornSpark.position.set(0, 1.72, 0.58);
-    g.add(hornSpark);
-
-    // 四本脚（馬脚＋蹄）
-    [[-0.25,-0.5,0.5],[0.25,-0.5,0.5],[-0.25,-0.5,-0.5],[0.25,-0.5,-0.5]].forEach(([x,y,z]) => {
-      const leg = makeCylinder(0.1, 0.08, 0.5, bodyColor, em, 0.1);
-      leg.position.set(x, y, z);
-      g.add(leg);
-      const hoof = makeCylinder(0.1, 0.1, 0.08, c, em, 0.4);
-      hoof.position.set(x, y - 0.28, z);
-      g.add(hoof);
-    });
-
-    // 小さな翼（かわいいベビーウイング）
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wing = makeEllipsoid(0.08, 0.3, 0.25, c, em, 0.4);
-      wing.position.set(side * 0.55, 0.35, -0.1);
-      wing.rotation.z = side * 0.4;
-      g.add(wing);
-      const wTip = makeSphere(0.04, '#ffffff', c, 0.9);
-      wTip.position.set(side * 0.7, 0.55, -0.1);
-      g.add(wTip);
-    });
-
-    // たてがみ（首に沿って光る球）
-    for (let i = 0; i < 4; i++) {
-      const mane = makeSphere(0.06, c, em, 0.6);
-      mane.position.set(0, 1.2 - i * 0.15, 0.6 - i * 0.02);
-      g.add(mane);
-    }
-
-    // 馬の尻尾（流れるような）
-    const tailBase = makeSphere(0.15, bodyColor, em, 0.1);
-    tailBase.position.set(0, -0.15, -0.85);
-    g.add(tailBase);
-    for (let i = 0; i < 3; i++) {
-      const strand = makeEllipsoid(0.04, 0.2, 0.04, c, em, 0.5);
-      strand.position.set((i-1)*0.06, -0.3 - i*0.05, -1.0 - i*0.05);
-      g.add(strand);
-    }
-
-    // 稲妻ほっぺマーク
-    [[-0.35, 0.95], [0.35, 0.95]].forEach(([x, y]) => {
-      const bolt = makeCone(0.03, 0.1, c, em, 1.0);
-      bolt.position.set(x, y, 0.9);
-      bolt.rotation.z = 0.5;
-      g.add(bolt);
-    });
-
-    addAttrEffect(g, attr, 'baby');
-    return g;
-  }
-
-  // === 闇ベビー：フードをかぶった怪獣（得体の知れない存在） ===
-  if (attr === 'dark') {
-    // 体（マント下に隠れた不定形の胴体）
-    const torso = makeEllipsoid(0.6, 0.8, 0.5, '#0a0a15', em, 0.05);
-    g.add(torso);
-
-    // マント/ローブ（大きなコーン形状で体を覆う）
-    const cloak = makeCone(0.9, 1.8, '#0a0a15', em, 0.05);
-    cloak.position.set(0, 0.2, 0);
-    g.add(cloak);
-
-    // フード（頭を覆う大きな丸いフード）
-    const hood = makeEllipsoid(0.6, 0.55, 0.6, '#0a0a15', em, 0.08);
-    hood.position.set(0, 1.2, 0.1);
-    g.add(hood);
-    // フードの先端（とんがり）
-    const hoodPeak = makeCone(0.35, 0.5, '#0a0a15', em, 0.06);
-    hoodPeak.position.set(0, 1.55, -0.05);
-    g.add(hoodPeak);
-    // フードの縁（前面に張り出す）
-    const hoodBrim = makeEllipsoid(0.5, 0.1, 0.35, '#0a0a15', em, 0.08);
-    hoodBrim.position.set(0, 1.25, 0.45);
-    g.add(hoodBrim);
-
-    // フード内部の闇（真っ暗な虚空）
-    const hoodInner = makeEllipsoid(0.4, 0.35, 0.2, '#020005', '#000000', 0);
-    hoodInner.position.set(0, 1.15, 0.35);
-    g.add(hoodInner);
-
-    // フード内で光る目（得体の知れない存在の証）
-    [[-0.15, 0], [0.15, 0]].forEach(([x]) => {
-      // 外側のグロー（ぼんやり光る）
-      const eyeGlow = makeSphere(0.08, c, em, 1.5);
-      eyeGlow.position.set(x, 1.15, 0.45);
-      g.add(eyeGlow);
-      // 中心（鋭く白く光る）
-      const eyeCore = makeSphere(0.04, '#ffffff', c, 2.0);
-      eyeCore.position.set(x, 1.15, 0.5);
-      g.add(eyeCore);
-    });
-
-    // マントから覗く小さな手
-    [[-0.45, 0], [0.45, 0]].forEach(([x]) => {
-      const hand = makeSphere(0.1, bodyColor, em, 0.1);
-      hand.position.set(x, 0.0, 0.3);
-      g.add(hand);
-      for (let f = 0; f < 3; f++) {
-        const finger = makeSphere(0.03, c, em, 0.5);
-        finger.position.set(x + (f-1)*0.05, -0.05, 0.38);
-        g.add(finger);
-      }
-    });
-
-    // マント裾（ゆらめく端 — 地面付近で散る）
-    for (let i = 0; i < 6; i++) {
-      const angle = i * Math.PI / 3;
-      const wisp = makeEllipsoid(0.15 - i*0.01, 0.08, 0.15 - i*0.01, '#0a0a15', em, 0.03 + i*0.02);
-      wisp.position.set(Math.sin(angle) * 0.4, -0.85 - i*0.03, Math.cos(angle) * 0.3);
-      g.add(wisp);
-    }
-
-    // 浮遊するオーブ（周囲に漂う不気味な光）
-    for (let i = 0; i < 4; i++) {
-      const angle = i * Math.PI / 2;
-      const orb = makeSphere(0.04, c, em, 0.8 + i*0.1);
-      orb.position.set(Math.sin(angle) * 0.8, 0.3 + Math.cos(angle*2) * 0.2, Math.cos(angle) * 0.6);
-      g.add(orb);
-    }
-
-    addAttrEffect(g, attr, 'baby');
-    return g;
-  }
-
-  // === 共通ベース：まんまるスムーズ体型（炎用） ===
-  // 体（大きな球）
-  const body = makeEllipsoid(0.85, 0.8, 0.75, bodyColor, em, 0.15);
-  body.position.y = 0;
-  g.add(body);
-
-  // おなか（明るめ）
-  const belly = makeEllipsoid(0.6, 0.55, 0.3, '#2a3a2a', em, 0.1);
-  belly.position.set(0, -0.15, 0.45);
-  g.add(belly);
-
-  // 頭（体より大きい球＝ちび感）
-  const head = makeSphere(0.9, bodyColor, em, 0.15);
-  head.position.set(0, 1.25, 0.15);
-  g.add(head);
-
-  // ほっぺ（小さい球でぷにっと）
-  [[-0.6, 1.0], [0.6, 1.0]].forEach(([x, y]) => {
-    const cheek = makeSphere(0.2, c, em, 0.25);
-    cheek.position.set(x, y, 0.6);
-    g.add(cheek);
-  });
-
-  // 目（大きくてまんまる）
-  [[-0.3, 0], [0.3, 0]].forEach(([x]) => {
-    const eyeWhite = makeSphere(0.22, '#ffffff', '#ffffff', 0.3);
-    eyeWhite.position.set(x, 1.35, 0.7);
-    g.add(eyeWhite);
-    const iris = makeSphere(0.15, '#111111', '#000000', 0);
-    iris.position.set(x, 1.34, 0.82);
-    g.add(iris);
-    // ハイライト
-    const hl = makeSphere(0.06, '#ffffff', '#ffffff', 1.0);
-    hl.position.set(x + 0.06, 1.42, 0.88);
-    g.add(hl);
-  });
-
-  // 口（にっこりトーラス）
-  const mouth = makeTorus(0.12, 0.025, c, em, 0.5);
-  mouth.position.set(0, 0.95, 0.8);
-  mouth.rotation.x = 0.3;
-  mouth.rotation.z = Math.PI;
-  g.add(mouth);
-
-  // 鼻（ちょこんと球）
-  const nose = makeEllipsoid(0.08, 0.06, 0.06, c, em, 0.4);
-  nose.position.set(0, 1.1, 0.88);
-  g.add(nose);
-
-  // ぷにぷに足（球で短くて太い）
-  [[-0.45, -0.85, 0.3], [0.45, -0.85, 0.3], [-0.35, -0.85, -0.3], [0.35, -0.85, -0.3]].forEach(([x,y,z]) => {
-    const leg = makeEllipsoid(0.22, 0.2, 0.22, bodyColor, em, 0.1);
-    leg.position.set(x, y, z);
-    g.add(leg);
-    // 肉球
-    const pad = makeSphere(0.1, c, em, 0.4);
-    pad.position.set(x, y - 0.17, z);
-    g.add(pad);
-  });
-
-  // === 属性別パーツ ===
-  if (attr === 'fire') {
-    // 炎：頭の上にちいさな炎冠
-    for (let i = 0; i < 3; i++) {
-      const flame = makeEllipsoid(0.08 - i*0.015, 0.16 - i*0.03, 0.06, c, em, 0.9);
-      flame.position.set((i-1)*0.18, 2.2 + i*0.12, 0.15);
-      flame.rotation.z = (i-1) * 0.3;
-      g.add(flame);
-    }
-    const flameTop = makeSphere(0.07, '#FF8C00', em, 1.0);
-    flameTop.position.set(0, 2.55, 0.15);
-    g.add(flameTop);
-    // ぷに尻尾（球の連鎖 → 炎先端）
-    const tail1 = makeSphere(0.28, bodyColor, em, 0.1);
-    tail1.position.set(0, -0.3, -0.85);
-    g.add(tail1);
-    const tail2 = makeSphere(0.2, bodyColor, em, 0.1);
-    tail2.position.set(0, -0.42, -1.2);
-    g.add(tail2);
-    const tailFlame = makeEllipsoid(0.15, 0.22, 0.12, c, em, 0.9);
-    tailFlame.position.set(0, -0.35, -1.5);
-    g.add(tailFlame);
-    const tailSpark = makeSphere(0.08, '#FF8C00', em, 1.0);
-    tailSpark.position.set(0, -0.25, -1.65);
-    g.add(tailSpark);
-    // 小翼（丸い膜）
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const wing = makeEllipsoid(0.08, 0.35, 0.3, c, em, 0.5);
-      wing.position.set(side*0.85, 0.35, -0.1);
-      wing.rotation.z = side*0.4;
-      g.add(wing);
-    });
-
-  }
-
-  g.scale.setScalar(0.8);
-  addAttrEffect(g, attr, 'baby');
-  return g;
-}
-
-// 成体：スムーズ＆かっこいいドラゴン（属性別＋育成タイプ装飾）
-function buildAdultDragon(attr) {
-  const g = new THREE.Group();
-  const c  = ATTR[attr].color;
-  const em = ATTR[attr].emissive;
-  const bodyColor = '#0d1a0d';
-  const bc2 = '#1a2a1a';
-  const type = state ? state.dragonType : 'balanced';
-
-  // ===== 属性別ユニーク体型（成体版） =====
-
-  // === 氷成体：ゴジラ（二足歩行の巨大怪獣） ===
-  if (attr === 'ice') {
-    // 直立した巨大な胴体
-    const torso = makeEllipsoid(0.75, 0.95, 0.7, bodyColor, em, 0.2);
-    torso.position.set(0, 0.2, 0);
-    g.add(torso);
-    // 胸板（前面が明るめ）
-    const chest = makeEllipsoid(0.5, 0.7, 0.35, bc2, em, 0.15);
-    chest.position.set(0, 0.25, 0.4);
-    g.add(chest);
-    // 腹部
-    const belly = makeEllipsoid(0.55, 0.45, 0.35, bc2, em, 0.1);
-    belly.position.set(0, -0.1, 0.3);
-    g.add(belly);
-    // 肩の筋肉
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const sh = makeEllipsoid(0.25, 0.2, 0.3, bodyColor, em, 0.18);
-      sh.position.set(side*0.6, 0.55, 0.15);
-      g.add(sh);
-    });
-
-    // 太い首（短めで力強い）
-    for (let i = 0; i < 3; i++) {
-      const t = i / 2;
-      const nR = 0.28 * (1.2 - t * 0.3);
-      const seg = makeCylinder(nR, nR*0.9, 0.22, bodyColor, em, 0.2);
-      seg.position.set(0, 0.75 + t*0.4, 0.3 + t*0.15);
-      seg.rotation.x = -0.15;
-      g.add(seg);
-    }
-
-    // 頭部（ゴジラの角張った巨大頭蓋）
-    const skull = makeEllipsoid(0.42, 0.35, 0.5, bodyColor, em, 0.2);
-    skull.position.set(0, 1.55, 0.45);
-    g.add(skull);
-    // 吻部（上顎 — 長くて重厚）
-    const snout = makeEllipsoid(0.32, 0.25, 0.45, bodyColor, em, 0.2);
-    snout.position.set(0, 1.4, 0.8);
-    g.add(snout);
-    // 鼻先
-    const snoutTip = makeEllipsoid(0.25, 0.18, 0.2, bodyColor, em, 0.22);
-    snoutTip.position.set(0, 1.38, 1.1);
-    g.add(snoutTip);
-    // 鼻梁
-    const noseBridge = makeEllipsoid(0.12, 0.08, 0.35, bodyColor, em, 0.25);
-    noseBridge.position.set(0, 1.55, 0.7);
-    g.add(noseBridge);
-    // 下顎
-    const lowerJaw = makeEllipsoid(0.28, 0.15, 0.4, bodyColor, em, 0.18);
-    lowerJaw.position.set(0, 1.22, 0.75);
-    lowerJaw.rotation.x = 0.1;
-    g.add(lowerJaw);
-    // 下顎先端
-    const lowerJawTip = makeEllipsoid(0.2, 0.1, 0.2, bodyColor, em, 0.18);
-    lowerJawTip.position.set(0, 1.18, 1.0);
-    g.add(lowerJawTip);
-    // 口の内部
-    const mouthInside = makeEllipsoid(0.22, 0.06, 0.25, '#080808', '#000000', 0);
-    mouthInside.position.set(0, 1.3, 0.85);
-    g.add(mouthInside);
-    // 牙（上顎）
-    [[-0.1, 1.32, 1.05], [0.1, 1.32, 1.05], [-0.07, 1.32, 0.9], [0.07, 1.32, 0.9]].forEach(([x,y,z], i) => {
-      const fh = i < 2 ? 0.22 : 0.15;
-      const fang = makeCone(0.03, fh, '#e8e0d0', '#ffffff', 0.5);
-      fang.position.set(x, y-fh*0.5, z);
-      fang.rotation.x = Math.PI;
-      g.add(fang);
-    });
-    // 牙（下顎）
-    [[-0.09, 1.22, 0.95], [0.09, 1.22, 0.95]].forEach(([x,y,z]) => {
-      const fang = makeCone(0.025, 0.16, '#e8e0d0', '#ffffff', 0.5);
-      fang.position.set(x, y, z);
-      g.add(fang);
-    });
-    // 眉稜
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const brow = makeEllipsoid(0.18, 0.08, 0.2, bodyColor, em, 0.25);
-      brow.position.set(side*0.2, 1.65, 0.78);
-      g.add(brow);
-    });
-    // 目（小さく鋭い — ゴジラの怒り目）
-    [[-0.24, 0], [0.24, 0]].forEach(([x]) => {
-      const eyeSocket = makeEllipsoid(0.10, 0.06, 0.05, '#020502', '#000000', 0);
-      eyeSocket.position.set(x, 1.52, 0.88);
-      g.add(eyeSocket);
-      const eyeGlow = makeEllipsoid(0.085, 0.05, 0.03, c, em, 1.2);
-      eyeGlow.position.set(x, 1.52, 0.90);
-      g.add(eyeGlow);
-      const eye = makeEllipsoid(0.07, 0.04, 0.025, '#ffffff', c, 1.5);
-      eye.position.set(x, 1.52, 0.92);
-      g.add(eye);
-      const pupil = makeEllipsoid(0.015, 0.03, 0.015, '#000000', '#000000', 0);
-      pupil.position.set(x, 1.52, 0.935);
-      g.add(pupil);
-    });
-    // 鼻孔
-    [[-0.06, 0], [0.06, 0]].forEach(([x]) => {
-      const n = makeSphere(0.03, c, em, 0.6);
-      n.position.set(x, 1.42, 1.22);
-      g.add(n);
-    });
-    // 後頭部スパイク列
-    for (let i = 0; i < 4; i++) {
-      const spH = 0.14 - i*0.02;
-      const sp = makeCone(0.025, spH, bodyColor, em, 0.3);
-      sp.position.set(0, 1.7-i*0.02, 0.2+i*0.08);
-      sp.rotation.x = -0.35;
-      g.add(sp);
-    }
-
-    // 二本の巨大な脚（二足歩行 — ゴジラの力強い脚）
-    [[-0.4, 0], [0.4, 0]].forEach(([x]) => {
-      // 太もも（巨大）
-      const thigh = makeEllipsoid(0.3, 0.38, 0.3, bodyColor, em, 0.15);
-      thigh.position.set(x, -0.35, -0.1);
-      g.add(thigh);
-      // 脛
-      const shin = makeCylinder(0.2, 0.15, 0.45, bodyColor, em, 0.15);
-      shin.position.set(x, -0.7, -0.05);
-      g.add(shin);
-      // 足
-      const foot = makeEllipsoid(0.22, 0.1, 0.3, bodyColor, em, 0.12);
-      foot.position.set(x, -0.98, 0.1);
-      g.add(foot);
-      // 爪×3
-      for (let ti = 0; ti < 3; ti++) {
-        const angle = (ti - 1) * 0.7;
-        const tx = x + Math.sin(angle) * 0.15;
-        const tz = 0.1 + 0.22 + Math.cos(angle) * 0.05;
-        const claw = makeCone(0.04, 0.15, c, em, 0.7);
-        claw.position.set(tx, -0.98, tz);
-        claw.rotation.x = Math.PI/2 + 0.3;
-        claw.rotation.y = angle * 0.5;
-        g.add(claw);
-      }
-    });
-
-    // 短い腕（T-レックス風の前肢）
-    [[-0.6, 0], [0.6, 0]].forEach(([x]) => {
-      // 上腕
-      const upperArm = makeEllipsoid(0.14, 0.22, 0.12, bodyColor, em, 0.15);
-      upperArm.position.set(x, 0.25, 0.35);
-      upperArm.rotation.z = x < 0 ? 0.5 : -0.5;
-      g.add(upperArm);
-      // 前腕
-      const forearm = makeEllipsoid(0.1, 0.18, 0.1, bodyColor, em, 0.15);
-      forearm.position.set(x + (x<0 ? -0.12 : 0.12), 0.05, 0.4);
-      forearm.rotation.z = x < 0 ? 0.3 : -0.3;
-      g.add(forearm);
-      // 手 + 爪
-      for (let ci = 0; ci < 2; ci++) {
-        const cl = makeCone(0.025, 0.1, c, em, 0.7);
-        cl.position.set(x + (x<0 ? -0.18 : 0.18), -0.05 + ci*0.06, 0.42 + ci*0.02);
-        cl.rotation.x = 0.4;
-        cl.rotation.z = x < 0 ? -0.3 : 0.3;
-        g.add(cl);
-      }
-    });
-
-    // ドーサルプレート（氷の結晶 — ゴジラのトレードマーク、大きく印象的に）
-    for (let i = 0; i < 10; i++) {
-      const h = 0.15 + Math.sin(i / 9 * Math.PI) * 0.35;
-      const w = 0.04 + Math.sin(i / 9 * Math.PI) * 0.03;
-      const plate = makeCone(w, h, i%2===0 ? c : '#ffffff', '#aaddff', 0.8 + (i%2)*0.2);
-      plate.position.set(0, 0.95 - i*0.12, -0.15 - i*0.08);
-      g.add(plate);
-      // サイドプレート（小さめ左右交互）
-      if (i > 1 && i < 8) {
-        const side = i % 2 === 0 ? -1 : 1;
-        const sp = makeCone(w*0.6, h*0.4, '#ffffff', '#aaddff', 0.9);
-        sp.position.set(side*0.08, 0.9 - i*0.12, -0.2 - i*0.08);
-        sp.rotation.z = side * 0.3;
-        g.add(sp);
-      }
-    }
-
-    // 尻尾（太くて長い — ゴジラの重量感ある尻尾）
-    const tailData = [
-      {r:0.35,p:[0,-0.2,-0.9]},{r:0.28,p:[0,-0.35,-1.45]},{r:0.22,p:[0,-0.48,-1.95]},
-      {r:0.17,p:[0,-0.58,-2.4]},{r:0.13,p:[0,-0.66,-2.8]},{r:0.1,p:[0,-0.72,-3.15]},
-      {r:0.07,p:[0,-0.76,-3.45]},{r:0.05,p:[0,-0.78,-3.7]},
-    ];
-    tailData.forEach(({r,p}) => {
-      const seg = makeSphere(r, bodyColor, em, 0.15);
-      seg.position.set(...p);
-      g.add(seg);
-    });
-    // 尻尾のドーサルプレート（小さめ）
-    for (let i = 0; i < 5; i++) {
-      const sp = makeCone(0.025, 0.1 + i*0.01, c, '#aaddff', 0.7);
-      sp.position.set(0, -0.15 - i*0.12, -1.0 - i*0.5);
-      g.add(sp);
-    }
-    // 尻尾先端の氷結晶
-    const tailCrystal = makeCone(0.04, 0.18, '#ffffff', '#aaddff', 1.0);
-    tailCrystal.position.set(0, -0.75, -3.85);
-    tailCrystal.rotation.x = 0.5;
-    g.add(tailCrystal);
-
-    // 氷の装甲（体表面）
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      for (let i = 0; i < 4; i++) {
-        const armor = makeEllipsoid(0.06, 0.18 - i*0.03, 0.25 - i*0.04, c, em, 0.4 + i*0.1);
-        armor.position.set(side*(0.62+i*0.03), 0.1 + i*0.18, -0.05+i*0.1);
-        g.add(armor);
-      }
-    });
-    // 背中の装甲プレート
-    for (let i = 0; i < 3; i++) {
-      const bp = makeEllipsoid(0.3-i*0.05, 0.03, 0.22, '#ffffff', '#aaddff', 0.5+i*0.15);
-      bp.position.set(0, 0.9+i*0.03, -0.1+i*0.2);
-      g.add(bp);
-    }
-
-    // 体表の霜模様
-    for (let i = 0; i < 6; i++) {
-      const frost = makeSphere(0.03, '#ffffff', '#aaddff', 0.6+i*0.08);
-      frost.position.set(Math.sin(i*1.2)*0.6, 0.1+Math.cos(i*1.2)*0.5, -0.1+i*0.15);
-      g.add(frost);
-    }
-
-    // 育成タイプ装飾
-    if (type === 'attacker') {
-      [[-0.4, 0], [0.4, 0]].forEach(([x]) => {
-        const bigClaw = makeCone(0.065, 0.28, c, em, 0.9);
-        bigClaw.position.set(x, -0.98, 0.35);
-        bigClaw.rotation.x = 0.6;
-        g.add(bigClaw);
-      });
-      [[-0.1, 1.3, 0.92], [0.1, 1.3, 0.92]].forEach(([x,y,z]) => {
-        const fang = makeCone(0.035, 0.2, '#ffffff', '#ffffff', 0.8);
-        fang.position.set(x, y, z);
-        fang.rotation.x = Math.PI;
-        g.add(fang);
-      });
-    } else if (type === 'tank') {
-      for (let i = 0; i < 5; i++) {
-        const plate = makeEllipsoid(0.22, 0.08, 0.25, c, em, 0.35+i*0.04);
-        plate.position.set(0, 0.8+i*0.035, -0.3+i*0.22);
-        g.add(plate);
-      }
-      [[-1, 0], [1, 0]].forEach(([side]) => {
-        const shoulder = makeEllipsoid(0.2, 0.16, 0.22, c, em, 0.45);
-        shoulder.position.set(side*0.8, 0.6, 0.15);
-        g.add(shoulder);
-      });
-    } else if (type === 'speedster') {
-      [[-1, 0], [1, 0]].forEach(([side]) => {
-        const fin = makeEllipsoid(0.28, 0.04, 0.4, c, em, 0.5);
-        fin.position.set(side*0.85, 0, -0.3);
-        g.add(fin);
-      });
-    }
-
-    // 氷柱群（地面から怪獣の斜め後ろ〜真後ろにかけて聳える）
-    const icicleData = [
-      // 真後ろ中央（最大・最も目立つ）
-      [ 0.00, -1.8,  1.00, 1.00,  0.00],
-      [ 0.00, -2.6,  0.85, 0.90,  0.05],
-      [ 0.00, -3.2,  0.65, 0.75,  0.08],
-      // 左斜め後ろ
-      [-0.55, -1.5,  0.90, 0.95, -0.12],
-      [-1.05, -2.0,  0.78, 0.82, -0.18],
-      [-1.55, -2.5,  0.62, 0.70, -0.22],
-      [-0.30, -2.9,  0.72, 0.78,  0.04],
-      // 右斜め後ろ
-      [ 0.55, -1.5,  0.90, 0.95,  0.12],
-      [ 1.05, -2.0,  0.78, 0.82,  0.18],
-      [ 1.55, -2.5,  0.62, 0.70,  0.22],
-      [ 0.30, -2.9,  0.72, 0.78, -0.04],
-      // 最後列（細い添え柱）
-      [-0.80, -3.5,  0.50, 0.60, -0.25],
-      [ 0.80, -3.5,  0.50, 0.60,  0.25],
-      [ 0.00, -3.8,  0.40, 0.55,  0.10],
-    ];
-    icicleData.forEach(([ix, iz, hMul, wMul, tilt]) => {
-      const ih = (3.2 + Math.random() * 0.6) * hMul;
-      const iw = (0.35 + Math.random() * 0.10) * wMul;
-      // 氷柱本体
-      const pillar = makeCone(iw, ih, '#a8e8ff', '#ffffff', 0.55);
-      pillar.position.set(ix, -0.7 + ih * 0.5, iz);
-      pillar.rotation.z = tilt;
-      g.add(pillar);
-      // 根本の台座
-      const base = makeCylinder(iw * 1.5, iw * 1.2, 0.15, '#ccf4ff', '#aaddff', 0.35);
-      base.position.set(ix, -0.7 + 0.075, iz);
-      base.rotation.z = tilt;
-      g.add(base);
-      // 内部グロー
-      const glow = makeCone(iw * 0.55, ih * 0.85, '#e8f8ff', '#aaddff', 0.20);
-      glow.position.set(ix, -0.7 + ih * 0.5, iz);
-      glow.rotation.z = tilt;
-      g.add(glow);
-      // 先端の輝き
-      const tip = makeSphere(iw * 0.38, '#ffffff', '#d0f0ff', 0.9);
-      tip.position.set(
-        ix + Math.sin(tilt) * ih * 0.5,
-        -0.7 + ih,
-        iz
-      );
-      g.add(tip);
-    });
-
-    addAttrEffect(g, attr, 'adult');
-    return g;
-  }
-
-  // === 雷成体：ペガサス（翼のある馬＋角から雷撃） ===
-  if (attr === 'thunder') {
-    // 馬体（優雅で力強い水平ボディ）
-    const torso = makeEllipsoid(0.55, 0.5, 1.1, bodyColor, em, 0.2);
-    g.add(torso);
-    const chestP = makeEllipsoid(0.4, 0.45, 0.5, bc2, em, 0.15);
-    chestP.position.set(0, 0.1, 0.5);
-    g.add(chestP);
-    const bellyP = makeEllipsoid(0.42, 0.35, 0.55, bc2, em, 0.1);
-    bellyP.position.set(0, -0.15, 0.1);
-    g.add(bellyP);
-
-    // 肩
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const sh = makeEllipsoid(0.2, 0.18, 0.28, bodyColor, em, 0.18);
-      sh.position.set(side*0.48, 0.18, 0.5);
-      g.add(sh);
-    });
-    // 腰
-    const hip = makeEllipsoid(0.5, 0.42, 0.5, bodyColor, em, 0.15);
-    hip.position.set(0, -0.05, -0.5);
-    g.add(hip);
-
-    // 首（アーチ状に伸びる優雅な馬首）
-    const neckSegs = 5;
-    for (let i = 0; i < neckSegs; i++) {
-      const t = i / (neckSegs - 1);
-      const nY = 0.35 + t * 0.8;
-      const nZ = 0.6 + t * 0.25;
-      const nRad = 0.2 * (1.3 - t * 0.35);
-      const seg = makeCylinder(nRad, nRad*0.9, 0.2, bodyColor, em, 0.2);
-      seg.position.set(0, nY, nZ);
-      seg.rotation.x = -0.25 - t*0.1;
-      g.add(seg);
-    }
-    // 喉（前面の膨らみ）
-    const throat = makeEllipsoid(0.1, 0.3, 0.15, bc2, em, 0.1);
-    throat.position.set(0, 0.6, 0.82);
-    throat.rotation.x = -0.2;
-    g.add(throat);
-
-    // 頭部（馬の優雅な頭蓋）
-    const skull = makeEllipsoid(0.3, 0.28, 0.42, bodyColor, em, 0.2);
-    skull.position.set(0, 1.5, 0.88);
-    g.add(skull);
-    // 吻部（馬の長いマズル）
-    const snout = makeEllipsoid(0.2, 0.2, 0.45, bodyColor, em, 0.2);
-    snout.position.set(0, 1.38, 1.2);
-    g.add(snout);
-    // 鼻先
-    const snoutTip = makeEllipsoid(0.18, 0.16, 0.15, bodyColor, em, 0.22);
-    snoutTip.position.set(0, 1.35, 1.5);
-    g.add(snoutTip);
-    // 下顎
-    const lowerJaw = makeEllipsoid(0.18, 0.12, 0.35, bodyColor, em, 0.18);
-    lowerJaw.position.set(0, 1.25, 1.15);
-    g.add(lowerJaw);
-    // 鼻孔
-    [[-0.06, 0], [0.06, 0]].forEach(([x]) => {
-      const n = makeSphere(0.03, c, em, 0.6);
-      n.position.set(x, 1.38, 1.58);
-      g.add(n);
-    });
-
-    // 耳（馬耳 — 長くてとがった）
-    [[-0.12, 0], [0.12, 0]].forEach(([x]) => {
-      const ear = makeCone(0.04, 0.22, bodyColor, em, 0.2);
-      ear.position.set(x, 1.75, 0.78);
-      ear.rotation.z = x < 0 ? 0.15 : -0.15;
-      g.add(ear);
-    });
-
-    // 角（太く力強い螺旋角 — 雷撃の源、前方を向く）
-    // rotation.x=1.2 → 先端方向 (0, +0.362, +0.932)
-    // 全パーツを horn軸方向に Δ=0.5 スライドして後頭部貫通を解消
-    const hornBase = makeCone(0.20, 0.25, c, em, 0.9);
-    hornBase.position.set(0, 1.601, 1.366);
-    hornBase.rotation.x = 1.2;
-    g.add(hornBase);
-    const hornMain = makeCone(0.13, 1.50, c, em, 1.1);
-    hornMain.position.set(0, 1.701, 1.636);
-    hornMain.rotation.x = 1.2;
-    g.add(hornMain);
-    const hornTip = makeCone(0.04, 0.45, '#ffffff', c, 1.4);
-    hornTip.position.set(0, 2.051, 2.546);
-    hornTip.rotation.x = 1.2;
-    g.add(hornTip);
-    // 螺旋リング（白っぽい黄色 '#ffffcc' — 視認性重視）
-    for (let i = 0; i < 6; i++) {
-      const d = -0.60 + i * (1.20 / 5);
-      const rr = 0.14 - i * 0.017;
-      const tube = 0.020 - i * 0.002;
-      const ring = makeTorus(rr, tube, '#ffffcc', '#ffffaa', 1.0 + i*0.05);
-      ring.position.set(0, 1.701 + d*0.362, 1.636 + d*0.932);
-      ring.rotation.x = 1.2;
-      g.add(ring);
-    }
-    // 根本の発光オーラ（額への接合部）
-    const hornRoot = makeSphere(0.12, c, em, 0.8);
-    hornRoot.position.set(0, 1.551, 1.196);
-    g.add(hornRoot);
-    // 先端スパーク
-    const hornTipSpark = makeSphere(0.07, '#ffffff', '#ffffcc', 2.2);
-    hornTipSpark.position.set(0, 2.131, 2.756);
-    g.add(hornTipSpark);
-    const hornTipGlow = makeSphere(0.13, c, em, 1.2);
-    hornTipGlow.position.set(0, 2.131, 2.756);
-    g.add(hornTipGlow);
-
-    // 目（大きく光る — 馬の目）
-    [[-0.2, 0], [0.2, 0]].forEach(([x]) => {
-      const eyeSocket = makeEllipsoid(0.1, 0.07, 0.05, '#020502', '#000000', 0);
-      eyeSocket.position.set(x, 1.5, 1.05);
-      g.add(eyeSocket);
-      const eyeGlow = makeEllipsoid(0.085, 0.055, 0.03, c, em, 1.2);
-      eyeGlow.position.set(x, 1.5, 1.07);
-      g.add(eyeGlow);
-      const eye = makeEllipsoid(0.07, 0.045, 0.025, '#ffffff', c, 1.5);
-      eye.position.set(x, 1.5, 1.09);
-      g.add(eye);
-      const pupil = makeEllipsoid(0.015, 0.035, 0.015, '#000000', '#000000', 0);
-      pupil.position.set(x, 1.5, 1.105);
-      g.add(pupil);
-    });
-
-    // たてがみ（首に沿ったエレクトリックなたてがみ）
-    for (let i = 0; i < 8; i++) {
-      const maneH = 0.12 + Math.sin(i/7*Math.PI) * 0.15;
-      const mane = makeCone(0.03, maneH, i%2===0 ? c : '#ffffff', em, 0.7 + (i%2)*0.3);
-      mane.position.set(0, 1.6 - i*0.13, 0.82 - i*0.03);
-      g.add(mane);
-    }
-
-    // 四本脚（力強い馬の筋肉脚 — 肩筋・前腕・膝関節・管骨・球節・蹄の多段構成）
-    // === 前脚 ===
-    [[-0.40, 0.42], [0.40, 0.42]].forEach(([x, z]) => {
-      // 肩の筋肉
-      const shoulder = makeEllipsoid(0.24, 0.34, 0.22, bodyColor, em, 0.18);
-      shoulder.position.set(x, -0.02, z);
-      g.add(shoulder);
-      // 前腕
-      const forearm = makeCylinder(0.16, 0.13, 0.38, bodyColor, em, 0.15);
-      forearm.position.set(x, -0.40, z + 0.02);
-      g.add(forearm);
-      // 膝関節
-      const knee = makeSphere(0.15, bodyColor, em, 0.20);
-      knee.position.set(x, -0.61, z + 0.03);
-      g.add(knee);
-      // 管骨
-      const cannon = makeCylinder(0.09, 0.08, 0.28, bodyColor, em, 0.15);
-      cannon.position.set(x, -0.78, z + 0.02);
-      g.add(cannon);
-      // 球節
-      const fetlock = makeSphere(0.11, bodyColor, em, 0.18);
-      fetlock.position.set(x, -0.95, z + 0.02);
-      g.add(fetlock);
-      // 蹄
-      const hoof = makeCylinder(0.16, 0.17, 0.11, c, em, 0.65);
-      hoof.position.set(x, -1.07, z);
-      g.add(hoof);
-      // 蹄の発光リム
-      const hoofRim = makeTorus(0.16, 0.013, c, em, 0.9);
-      hoofRim.position.set(x, -1.09, z);
-      hoofRim.rotation.x = Math.PI / 2;
-      g.add(hoofRim);
-    });
-    // === 後脚（ハック関節が特徴的な馬の後脚） ===
-    [[-0.40, -0.50], [0.40, -0.50]].forEach(([x, z]) => {
-      // 尻・ハム
-      const haunch = makeEllipsoid(0.30, 0.44, 0.30, bodyColor, em, 0.18);
-      haunch.position.set(x, -0.04, z);
-      g.add(haunch);
-      // 大腿部の筋肉
-      const hamstring = makeEllipsoid(0.22, 0.28, 0.20, bodyColor, em, 0.16);
-      hamstring.position.set(x, -0.36, z - 0.05);
-      g.add(hamstring);
-      // ガスキン
-      const gaskin = makeCylinder(0.17, 0.13, 0.38, bodyColor, em, 0.15);
-      gaskin.position.set(x, -0.48, z - 0.06);
-      gaskin.rotation.x = 0.12;
-      g.add(gaskin);
-      // ハック関節
-      const hock = makeEllipsoid(0.15, 0.13, 0.20, bodyColor, em, 0.22);
-      hock.position.set(x, -0.70, z + 0.06);
-      g.add(hock);
-      // ハック以下の管骨
-      const cannon = makeCylinder(0.11, 0.10, 0.26, bodyColor, em, 0.15);
-      cannon.position.set(x, -0.86, z + 0.04);
-      g.add(cannon);
-      // 球節
-      const fetlock = makeSphere(0.12, bodyColor, em, 0.18);
-      fetlock.position.set(x, -1.02, z + 0.04);
-      g.add(fetlock);
-      // 蹄
-      const hoof = makeCylinder(0.17, 0.18, 0.12, c, em, 0.65);
-      hoof.position.set(x, -1.15, z + 0.03);
-      g.add(hoof);
-      // 蹄の発光リム
-      const hoofRim = makeTorus(0.175, 0.014, c, em, 0.9);
-      hoofRim.position.set(x, -1.17, z + 0.03);
-      hoofRim.rotation.x = Math.PI / 2;
-      g.add(hoofRim);
-    });
-
-    // 背中の帯電スパイン（背骨に沿った電撃フィン — 雷感の核心）
-    for (let i = 0; i < 9; i++) {
-      const t = i / 8;
-      const sz = 0.35 - i * 0.15;
-      const spH = 0.18 + Math.sin(t * Math.PI) * 0.52;
-      const spW = 0.07 + Math.sin(t * Math.PI) * 0.05;
-      // 各z位置での体表面Y座標を胴体・胸パーツから計算
-      const torsoTopY  = 0.5  * Math.sqrt(Math.max(0, 1 - (sz / 1.1) ** 2));
-      const chestDz    = sz - 0.5;
-      const chestTopY  = Math.abs(chestDz) <= 0.5
-        ? 0.1 + 0.45 * Math.sqrt(Math.max(0, 1 - (chestDz / 0.5) ** 2))
-        : 0;
-      const backY = Math.max(torsoTopY, chestTopY);
-      // 交互に属性色と白で電荷を表現
-      const spineColor = i % 2 === 0 ? c : '#ffffff';
-      const spineEm    = i % 2 === 0 ? em : c;
-      const spine = makeCone(spW, spH, spineColor, spineEm, 0.9 + (i%2)*0.3);
-      spine.position.set(0, backY + spH * 0.5, sz);
-      g.add(spine);
-      // スパイン根本のリングプレート（体表面に密着）
-      const base = makeCylinder(spW * 1.6, spW * 1.6, 0.04, c, em, 0.7);
-      base.position.set(0, backY - 0.01, sz);
-      g.add(base);
-      // スパイン先端のスパーク
-      if (i % 2 === 0) {
-        const tip = makeSphere(0.05, '#ffffff', c, 1.5);
-        tip.position.set(0, backY + spH + 0.03, sz);
-        g.add(tip);
-      }
-    }
-
-    // 体側面の放電アーク（側腹から体外へ弧を描く雷）
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      // メイン放電ライン（体に沿って斜めに走る稲妻）
-      const arcAngles = [0.7, 1.1, -0.3];
-      arcAngles.forEach((rot, ai) => {
-        const arc = makeCylinder(0.008, 0.008, 0.5 + ai*0.08, '#ffffff', c, 1.2);
-        arc.position.set(side*(0.52 + ai*0.08), 0.2 - ai*0.12, 0.2 - ai*0.25);
-        arc.rotation.z = side * (0.9 + ai*0.3);
-        arc.rotation.x = rot * 0.2;
-        g.add(arc);
-        // 放電先端の光点
-        const dot = makeSphere(0.025, '#ffffff', c, 1.6);
-        dot.position.set(side*(0.75 + ai*0.12), 0.05 - ai*0.18, 0.22 - ai*0.28);
-        g.add(dot);
-      });
-      // 肩の電磁コイル（螺旋リング）
-      for (let ri = 0; ri < 3; ri++) {
-        const coil = makeTorus(0.17 - ri*0.03, 0.012, c, em, 0.5 + ri*0.15);
-        coil.position.set(side*0.5, 0.22 - ri*0.06, 0.45 - ri*0.05);
-        coil.rotation.y = side * (0.4 + ri*0.15);
-        coil.rotation.x = 0.5;
-        g.add(coil);
-      }
-    });
-
-    // 帯電オーラリング（胴体を包む電磁フィールド — 3本の楕円輪）
-    [[0, 0, 0.1], [0, 0.08, -0.3], [0, 0.04, -0.7]].forEach(([dx, dy, dz], ri) => {
-      const aura = makeTorus(0.62 - ri*0.04, 0.015, c, em, 0.35 + ri*0.1);
-      aura.position.set(dx, dy, dz);
-      aura.rotation.x = Math.PI/2 + 0.08;
-      g.add(aura);
-    });
-
-    // 荷電粒子群（体周囲を漂う電気の粒 — 6点対称）
-    for (let i = 0; i < 6; i++) {
-      const angle = i * Math.PI / 3;
-      const r = 0.78;
-      const cx2 = Math.sin(angle) * r;
-      const cz2 = Math.cos(angle) * r * 0.55;
-      const particle = makeSphere(0.035, i%2===0 ? '#ffffff' : c, c, 1.0 + (i%2)*0.4);
-      particle.position.set(cx2, 0.15 + Math.sin(angle*0.8)*0.2, cz2);
-      g.add(particle);
-      // 各粒子から体へのアーク
-      const arcLen = 0.18 + (i%3)*0.04;
-      const micro = makeCylinder(0.005, 0.005, arcLen, c, em, 0.9);
-      micro.position.set(cx2*0.7, 0.15 + Math.sin(angle*0.8)*0.2, cz2*0.7);
-      micro.rotation.z = Math.atan2(cx2, 1) * 0.8;
-      micro.rotation.x = Math.atan2(cz2, 1) * 0.6;
-      g.add(micro);
-    }
-
-    // 馬の尻尾（流れるようなエレクトリックテイル）
-    const tailBase = makeSphere(0.2, bodyColor, em, 0.15);
-    tailBase.position.set(0, -0.15, -0.95);
-    g.add(tailBase);
-    for (let i = 0; i < 8; i++) {
-      const strand = makeEllipsoid(0.03, 0.25-i*0.02, 0.03, i%2===0 ? c : '#ffffff', em, 0.5+i*0.05);
-      strand.position.set((i%3-1)*0.05, -0.35 - i*0.06, -1.1 - i*0.12);
-      g.add(strand);
-    }
-    const tailSpark = makeSphere(0.03, '#ffffff', c, 1.3);
-    tailSpark.position.set(0, -0.8, -2.0);
-    g.add(tailSpark);
-
-    // 背中の稲妻模様
-    for (let i = 0; i < 4; i++) {
-      [[-1, 0], [1, 0]].forEach(([side]) => {
-        const mark = makeCylinder(0.008, 0.008, 0.12, c, em, 0.8+i*0.1);
-        mark.position.set(side*(0.45+0.02), -0.1+i*0.14, -0.08+i*0.16);
-        mark.rotation.z = side*(0.8+i*0.2);
-        g.add(mark);
-      });
-    }
-
-    // 稲妻ほっぺマーク
-    [[-0.22, 1.42, 1.2], [0.22, 1.42, 1.2]].forEach(([x,y,z]) => {
-      const bolt1 = makeCone(0.02, 0.14, c, em, 1.0);
-      bolt1.position.set(x, y, z);
-      bolt1.rotation.z = 0.5;
-      g.add(bolt1);
-      const bolt2 = makeCone(0.015, 0.1, c, em, 1.0);
-      bolt2.position.set(x, y-0.08, z+0.03);
-      bolt2.rotation.z = -0.5;
-      g.add(bolt2);
-    });
-
-    // 育成タイプ装飾
-    if (type === 'attacker') {
-      // より大きな角
-      const bigHorn = makeCone(0.06, 0.35, '#ffffff', c, 1.5);
-      bigHorn.position.set(0, 2.431, 2.756);
-      bigHorn.rotation.x = 1.2;
-      g.add(bigHorn);
-      // 蹄のスパーク
-      [[-0.35,-0.77,0.44],[0.35,-0.77,0.44],[-0.35,-0.78,-0.39],[0.35,-0.78,-0.39]].forEach(([x,y,z]) => {
-        const spark = makeSphere(0.04, '#ffffff', c, 1.2);
-        spark.position.set(x, y, z);
-        g.add(spark);
-      });
-    } else if (type === 'tank') {
-      for (let i = 0; i < 4; i++) {
-        const plate = makeEllipsoid(0.2, 0.06, 0.22, c, em, 0.35+i*0.04);
-        plate.position.set(0, 0.5+i*0.03, -0.3+i*0.2);
-        g.add(plate);
-      }
-      [[-1, 0], [1, 0]].forEach(([side]) => {
-        const shoulder = makeEllipsoid(0.18, 0.14, 0.2, c, em, 0.45);
-        shoulder.position.set(side*0.65, 0.3, 0.35);
-        g.add(shoulder);
-      });
-    } else if (type === 'speedster') {
-      [[-1, 0], [1, 0]].forEach(([side]) => {
-        const booster = makeEllipsoid(0.08, 0.12, 0.3, c, em, 0.9);
-        booster.position.set(side*0.65, 0.2, -0.6);
-        booster.rotation.z = side*0.3;
-        g.add(booster);
-        const glow = makeSphere(0.04, '#ffffff', c, 1.0);
-        glow.position.set(side*0.65, 0.2, -0.9);
-        g.add(glow);
-      });
-    }
-
-    // グループ全体を+0.43上げて前蹄底が地面(y=-0.7)に揃う
-    g.position.y = 0.43;
-
-    addAttrEffect(g, attr, 'adult');
-    return g;
-  }
-
-  // === 闇成体：フードをかぶった謎の怪獣（得体の知れない存在） ===
-  if (attr === 'dark') {
-    // ローブ/マントの体（大きな円錐形で全身を覆う）
-    const robe = makeCone(1.3, 2.8, '#0a0a15', em, 0.05);
-    robe.position.set(0, 0.1, 0);
-    g.add(robe);
-    // ローブの内側の体（少し明るい）
-    const innerBody = makeEllipsoid(0.55, 0.9, 0.5, '#0d0d1a', em, 0.03);
-    innerBody.position.set(0, 0.2, 0.15);
-    g.add(innerBody);
-
-    // 肩（ローブの下に見える肩のライン）
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const sh = makeEllipsoid(0.35, 0.12, 0.25, '#0a0a15', em, 0.06);
-      sh.position.set(side*0.55, 0.8, 0);
-      g.add(sh);
-    });
-
-    // フード（大きく深い — 顔を完全に隠す）
-    const hood = makeEllipsoid(0.55, 0.52, 0.55, '#0a0a15', em, 0.08);
-    hood.position.set(0, 1.45, 0.05);
-    g.add(hood);
-    // フードの先端（とんがりが後ろに流れる）
-    const hoodPeak = makeCone(0.32, 0.6, '#0a0a15', em, 0.06);
-    hoodPeak.position.set(0, 1.75, -0.1);
-    g.add(hoodPeak);
-    // フードの縁（前面に大きく張り出す — 深い影を作る）
-    const hoodBrim = makeEllipsoid(0.48, 0.12, 0.4, '#0a0a15', em, 0.08);
-    hoodBrim.position.set(0, 1.5, 0.4);
-    g.add(hoodBrim);
-    // フードの左右の垂れ（フードの側面が垂れ下がる）
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const drape = makeEllipsoid(0.15, 0.35, 0.22, '#0a0a15', em, 0.06);
-      drape.position.set(side*0.38, 1.2, 0.1);
-      g.add(drape);
-    });
-
-    // フード内部の深い闇（虚空 — 何も見えない暗闇）
-    const hoodVoid = makeEllipsoid(0.38, 0.35, 0.12, '#020005', '#000000', 0);
-    hoodVoid.position.set(0, 1.38, 0.30);
-    g.add(hoodVoid);
-    // もう一層の闇（より深く）
-    const hoodVoid2 = makeEllipsoid(0.3, 0.28, 0.08, '#010003', '#000000', 0);
-    hoodVoid2.position.set(0, 1.35, 0.34);
-    g.add(hoodVoid2);
-
-    // フード内で光る目（得体の知れない存在の証 — 闇の中で鋭く光る）
-    [[-0.14, 0], [0.14, 0]].forEach(([x]) => {
-      // 外側の大きなグロー（ぼんやり）
-      const outerGlow = makeSphere(0.12, c, em, 1.2);
-      outerGlow.position.set(x, 1.32, 0.52);
-      g.add(outerGlow);
-      // 中間グロー
-      const midGlow = makeSphere(0.08, c, em, 1.8);
-      midGlow.position.set(x, 1.32, 0.54);
-      g.add(midGlow);
-      // 中心（鋭く白く光る — 縦スリット風）
-      const eyeCore = makeEllipsoid(0.025, 0.06, 0.02, '#ffffff', c, 2.5);
-      eyeCore.position.set(x, 1.32, 0.57);
-      g.add(eyeCore);
-    });
-
-    // ローブから伸びる手/腕（不気味に長い）
-    [[-0.65, 0], [0.65, 0]].forEach(([x]) => {
-      // 袖（ローブの袖口）
-      const sleeve = makeEllipsoid(0.12, 0.3, 0.12, '#0a0a15', em, 0.06);
-      sleeve.position.set(x, 0.25, 0.3);
-      sleeve.rotation.z = x < 0 ? 0.4 : -0.4;
-      g.add(sleeve);
-      // 手（暗い、ほぼシルエット）
-      const hand = makeEllipsoid(0.08, 0.12, 0.06, '#0d0d1a', em, 0.08);
-      hand.position.set(x + (x<0 ? -0.1 : 0.1), 0.0, 0.35);
-      g.add(hand);
-      // 光る指先（3本）
-      for (let f = 0; f < 3; f++) {
-        const finger = makeCone(0.015, 0.08, c, em, 0.6);
-        finger.position.set(x + (x<0 ? -0.12 : 0.12) + (f-1)*0.04, -0.08, 0.38);
-        finger.rotation.x = 0.3;
-        g.add(finger);
-      }
-    });
-
-    // ローブ裾（地面に広がる — ゆらめく不定形の端）
-    for (let i = 0; i < 8; i++) {
-      const angle = i * Math.PI / 4;
-      const r = 0.8 + Math.sin(i*2.3)*0.2;
-      const wisp = makeEllipsoid(0.2 - i*0.012, 0.1, 0.2 - i*0.012, '#0a0a15', em, 0.03 + i*0.015);
-      wisp.position.set(Math.sin(angle) * r * 0.5, -1.2 - i*0.03, Math.cos(angle) * r * 0.4);
-      g.add(wisp);
-    }
-
-    // 浮遊するオーブ（肩の周辺に — 闇のエネルギー）
-    [[-0.85, 0.9, 0.1], [0.85, 0.9, 0.1], [-0.5, 1.8, -0.15], [0.5, 1.8, -0.15]].forEach(([x,y,z]) => {
-      const orb = makeSphere(0.05, c, em, 1.0);
-      orb.position.set(x, y, z);
-      g.add(orb);
-      const orbRing = makeTorus(0.065, 0.008, c, em, 0.7);
-      orbRing.position.set(x, y, z);
-      orbRing.rotation.x = 0.5;
-      g.add(orbRing);
-    });
-
-    // 光る紋様（ローブ全体に散らばる）
-    for (let i = 0; i < 10; i++) {
-      const angle = i * 0.63;
-      const rune = makeSphere(0.025, c, em, 0.5 + i*0.06);
-      rune.position.set(
-        Math.sin(angle) * 0.5,
-        0.8 - i*0.15,
-        Math.cos(angle) * 0.4 + 0.1
-      );
-      g.add(rune);
-    }
-
-    // 闇のオーラ（周囲に漂う影の断片）
-    for (let i = 0; i < 6; i++) {
-      const angle = i * Math.PI / 3;
-      const shard = makeEllipsoid(0.04, 0.15, 0.03, c, em, 0.3 + i*0.08);
-      shard.position.set(
-        Math.sin(angle) * 1.2,
-        0.5 + Math.cos(angle * 1.5) * 0.4,
-        Math.cos(angle) * 0.8
-      );
-      shard.rotation.z = angle;
-      g.add(shard);
-    }
-
-    // 育成タイプ装飾
-    if (type === 'attacker') {
-      // 鋭い爪の手
-      [[-0.65, 0], [0.65, 0]].forEach(([x]) => {
-        for (let ci = 0; ci < 2; ci++) {
-          const cl = makeCone(0.02, 0.15, c, em, 0.9);
-          cl.position.set(x + (x<0 ? -0.15 : 0.15), -0.12 + ci*0.04, 0.4);
-          cl.rotation.x = 0.4;
-          g.add(cl);
-        }
-      });
-      // 目の光がより強く
-      const eyeBoost1 = makeSphere(0.12, c, em, 0.6);
-      eyeBoost1.position.set(-0.14, 1.35, 0.4);
-      g.add(eyeBoost1);
-      const eyeBoost2 = makeSphere(0.12, c, em, 0.6);
-      eyeBoost2.position.set(0.14, 1.35, 0.4);
-      g.add(eyeBoost2);
-    } else if (type === 'tank') {
-      // ローブの上に追加の装甲/シールド
-      for (let i = 0; i < 4; i++) {
-        const plate = makeEllipsoid(0.22, 0.06, 0.2, c, em, 0.3+i*0.05);
-        plate.position.set(0, 0.6+i*0.04, 0.35-i*0.03);
-        g.add(plate);
-      }
-      // 肩のシールドオーブ
-      [[-0.85, 0.9, 0.1], [0.85, 0.9, 0.1]].forEach(([x,y,z]) => {
-        const shield = makeSphere(0.08, c, em, 0.6);
-        shield.position.set(x, y, z);
-        g.add(shield);
-      });
-    } else if (type === 'speedster') {
-      // 浮遊する速度のウィスプ
-      for (let i = 0; i < 4; i++) {
-        const angle = i * Math.PI / 2;
-        const sp = makeEllipsoid(0.06, 0.03, 0.2, c, em, 0.7+i*0.1);
-        sp.position.set(Math.sin(angle)*1.0, 0.3, Math.cos(angle)*0.8 - 0.3);
-        sp.rotation.y = angle;
-        g.add(sp);
-      }
-    }
-
-    addAttrEffect(g, attr, 'adult');
-    return g;
-  }
-
-  // === 炎の体型パラメータ（前後に長い流線型、頭は小さめ） ===
-  const shapes = {
-    fire:    { bRx:0.6, bRy:0.55, bRz:1.0, nR:0.22, nH:1.1, hRx:0.32, hRy:0.28, hRz:0.42, hornH:0.9 },
-  };
-  const s = shapes[attr];
-
-  // === 共通ベースボディ（バランスの良い流線型） ===
-  // 胴体
-  const body = makeEllipsoid(s.bRx, s.bRy, s.bRz, bodyColor, em, 0.2);
-  g.add(body);
-  // 胸板
-  const chest = makeEllipsoid(s.bRx*0.45, s.bRy*0.75, s.bRz*0.5, bc2, em, 0.15);
-  chest.position.set(0, 0.05, 0.45);
-  g.add(chest);
-  // 腹
-  const belly = makeEllipsoid(s.bRx*0.5, s.bRy*0.35, s.bRz*0.4, bc2, em, 0.1);
-  belly.position.set(0, -0.15, 0.2);
-  g.add(belly);
-  // 肩
-  [[-1, 0], [1, 0]].forEach(([side]) => {
-    const shoulderMuscle = makeEllipsoid(0.18, 0.15, 0.25, bodyColor, em, 0.18);
-    shoulderMuscle.position.set(side*0.48, 0.12, 0.35);
-    g.add(shoulderMuscle);
-  });
-  // 腰
-  const hip = makeEllipsoid(s.bRx*0.55, s.bRy*0.5, s.bRz*0.48, bodyColor, em, 0.15);
-  hip.position.set(0, -0.06, -0.45);
-  g.add(hip);
-
-  // 首（セグメント化された力強い首 — 参考画像のリブ構造）
-  const neckSegs = 5;
-  for (let i = 0; i < neckSegs; i++) {
-    const t = i / (neckSegs - 1);
-    const nY = 0.25 + t * 0.75;
-    const nZ = 0.5 + t * 0.3;
-    const nRad = s.nR * (1.4 - t * 0.4);
-    const seg = makeCylinder(nRad, nRad*0.9, s.nH*0.18, bodyColor, em, 0.2);
-    seg.position.set(0, nY, nZ);
-    seg.rotation.x = -0.2 - t*0.15;
-    g.add(seg);
-    // 各セグメント間に溝（暗い細いリング）
-    if (i < neckSegs - 1) {
-      const groove = makeTorus(nRad*0.85, 0.008, bc2, em, 0.08);
-      groove.position.set(0, nY+0.08, nZ+0.03);
-      groove.rotation.x = Math.PI/2 - 0.2 - t*0.15;
-      g.add(groove);
-    }
-  }
-  // 首の筋肉（左右の太い筋）
-  [[-1, 0], [1, 0]].forEach(([side]) => {
-    const neckMuscle = makeEllipsoid(0.1, 0.35, 0.14, bc2, em, 0.12);
-    neckMuscle.position.set(side*0.12, 0.55, 0.6);
-    neckMuscle.rotation.x = -0.25;
-    g.add(neckMuscle);
-  });
-  // 喉の袋（前面の膨らみ）
-  const throat = makeEllipsoid(0.12, 0.28, 0.18, bc2, em, 0.1);
-  throat.position.set(0, 0.5, 0.78);
-  throat.rotation.x = -0.2;
-  g.add(throat);
-
-  // === 頭部（シャープで一体的なドラゴンヘッド） ===
-  // メイン頭蓋（大きく角張った形状）
-  const skull = makeEllipsoid(s.hRx*1.2, s.hRy*1.05, s.hRz*0.9, bodyColor, em, 0.2);
-  skull.position.set(0, 1.38, 0.85);
-  g.add(skull);
-  // 吻部（上顎 — 短めに詰めてコンパクト）
-  const snout = makeEllipsoid(s.hRx*0.75, s.hRy*0.55, s.hRz*0.9, bodyColor, em, 0.2);
-  snout.position.set(0, 1.28, 1.15);
-  g.add(snout);
-  // 鼻先
-  const snoutTip = makeEllipsoid(s.hRx*0.55, s.hRy*0.4, s.hRz*0.25, bodyColor, em, 0.22);
-  snoutTip.position.set(0, 1.25, 1.38);
-  g.add(snoutTip);
-  // 鼻梁（上面の鋭い稜線）
-  const noseBridge = makeEllipsoid(s.hRx*0.2, 0.08, s.hRz*0.7, bodyColor, em, 0.25);
-  noseBridge.position.set(0, 1.42, 1.05);
-  g.add(noseBridge);
-  // 下顎（しっかり開いた口）
-  const lowerJaw = makeEllipsoid(s.hRx*0.65, s.hRy*0.35, s.hRz*0.7, bodyColor, em, 0.18);
-  lowerJaw.position.set(0, 1.08, 1.05);
-  lowerJaw.rotation.x = 0.15;
-  g.add(lowerJaw);
-  // 下顎先端
-  const lowerJawTip = makeEllipsoid(s.hRx*0.45, s.hRy*0.22, s.hRz*0.25, bodyColor, em, 0.18);
-  lowerJawTip.position.set(0, 1.03, 1.28);
-  g.add(lowerJawTip);
-  // 口の内部（暗い空洞）
-  const mouthInside = makeEllipsoid(s.hRx*0.5, 0.08, s.hRz*0.4, '#080808', '#000000', 0);
-  mouthInside.position.set(0, 1.15, 1.12);
-  g.add(mouthInside);
-  // 牙（上顎 — 前方2本が大きく、奥2本が小さい）
-  [[-0.1, 1.18, 1.32], [0.1, 1.18, 1.32], [-0.07, 1.18, 1.18], [0.07, 1.18, 1.18]].forEach(([x,y,z], i) => {
-    const fh = i < 2 ? 0.2 : 0.13;
-    const fang = makeCone(0.028, fh, '#e8e0d0', '#ffffff', 0.5);
-    fang.position.set(x, y-fh*0.5, z);
-    fang.rotation.x = Math.PI;
-    g.add(fang);
-  });
-  // 牙（下顎 — 上向きに突き出す）
-  [[-0.09, 1.1, 1.22], [0.09, 1.1, 1.22]].forEach(([x,y,z]) => {
-    const fang = makeCone(0.024, 0.15, '#e8e0d0', '#ffffff', 0.5);
-    fang.position.set(x, y, z);
-    g.add(fang);
-  });
-  // 眉稜（目の上に大きく庇のように張り出す）
-  [[-1, 0], [1, 0]].forEach(([side]) => {
-    const browRidge = makeEllipsoid(0.16, 0.07, 0.18, bodyColor, em, 0.25);
-    browRidge.position.set(side*0.17, 1.5, 1.0);
-    g.add(browRidge);
-  });
-  // 頬骨（側面に鋭く張り出す）
-  [[-1, 0], [1, 0]].forEach(([side]) => {
-    const cheek = makeEllipsoid(0.12, 0.07, 0.2, bodyColor, em, 0.2);
-    cheek.position.set(side*0.28, 1.25, 0.92);
-    g.add(cheek);
-  });
-  // 目（大きく光る鋭い目 — 顔の横に配置）
-  const eyeW = 0.085;
-  const eyeH = 0.05;
-  [[-0.22, 0], [0.22, 0]].forEach(([x]) => {
-    // 眼窩（暗いくぼみ — 大きめ）
-    const eyeSocket = makeEllipsoid(eyeW+0.04, eyeH+0.04, 0.05, '#020502', '#000000', 0);
-    eyeSocket.position.set(x, 1.38, 1.06);
-    g.add(eyeSocket);
-    // 虹彩グロー（強く発光）
-    const eyeGlow = makeEllipsoid(eyeW+0.015, eyeH+0.015, 0.03, c, em, 1.2);
-    eyeGlow.position.set(x, 1.38, 1.08);
-    g.add(eyeGlow);
-    // 白目+虹彩（はっきり光る）
-    const eye = makeEllipsoid(eyeW, eyeH, 0.025, '#ffffff', c, 1.5);
-    eye.position.set(x, 1.38, 1.10);
-    g.add(eye);
-    // 瞳孔（縦スリット）
-    const pupil = makeEllipsoid(eyeW*0.18, eyeH*0.85, 0.015, '#000000', '#000000', 0);
-    pupil.position.set(x, 1.38, 1.115);
-    g.add(pupil);
-  });
-  // 鼻孔
-  [[-0.06, 0], [0.06, 0]].forEach(([x]) => {
-    const nostril = makeSphere(0.028, c, em, 0.6);
-    nostril.position.set(x, 1.28, 1.48);
-    g.add(nostril);
-  });
-  // 後頭部スパイク列（大→小、後ろに反る）
-  for (let i = 0; i < 5; i++) {
-    const spH = 0.16 - i*0.02;
-    const sp = makeCone(0.025, spH, bodyColor, em, 0.3);
-    sp.position.set(0, 1.55-i*0.015, 0.65+i*0.1);
-    sp.rotation.x = -0.35;
-    g.add(sp);
-  }
-  // 下顎の棘（アゴヒゲの鋭い突起 × 3）
-  for (let i = 0; i < 3; i++) {
-    const chinSpike = makeCone(0.02, 0.1+i*0.01, bodyColor, em, 0.2);
-    chinSpike.position.set(0, 0.98, 1.1+i*0.08);
-    chinSpike.rotation.x = Math.PI * 0.85;
-    g.add(chinSpike);
-  }
-
-  // 脚（太く頑丈な四肢）
-  const legPositions = [[-0.42,-0.2,0.35],[0.42,-0.2,0.35],[-0.38,-0.15,-0.38],[0.38,-0.15,-0.38]];
-  // 前脚
-  [[-0.42,-0.2,0.35],[0.42,-0.2,0.35]].forEach(([x,y,z]) => {
-    // 太もも（太い楕円体）
-    const thigh = makeEllipsoid(0.2, 0.25, 0.2, bodyColor, em, 0.15);
-    thigh.position.set(x, y-0.05, z);
-    g.add(thigh);
-    // 脛（太いテーパーシリンダー）
-    const shin = makeCylinder(0.16, 0.12, 0.35, bodyColor, em, 0.15);
-    shin.position.set(x, y-0.3, z+0.03);
-    g.add(shin);
-    // 足（がっしりした楕円体）
-    const foot = makeEllipsoid(0.15, 0.07, 0.18, bodyColor, em, 0.12);
-    foot.position.set(x, y-0.52, z+0.08);
-    g.add(foot);
-    // 爪×3（足の前端から生える）
-    for (let ti = 0; ti < 3; ti++) {
-      const angle = (ti - 1) * 0.7;
-      const tx = x + Math.sin(angle) * 0.12;
-      const tz = z + 0.08 + 0.14 + Math.cos(angle) * 0.04;
-      const claw = makeCone(0.035, 0.13, c, em, 0.7);
-      claw.position.set(tx, y-0.52, tz);
-      claw.rotation.x = Math.PI/2 + 0.3;
-      claw.rotation.y = angle * 0.5;
-      g.add(claw);
-    }
-  });
-  // 後脚（前脚よりさらに太く筋肉質）
-  [[-0.38,-0.15,-0.38],[0.38,-0.15,-0.38]].forEach(([x,y,z]) => {
-    // 太もも（巨大な楕円体）
-    const thigh = makeEllipsoid(0.24, 0.3, 0.24, bodyColor, em, 0.15);
-    thigh.position.set(x, y-0.02, z);
-    g.add(thigh);
-    // 脛（太いテーパー）
-    const shin = makeCylinder(0.18, 0.13, 0.4, bodyColor, em, 0.15);
-    shin.position.set(x, y-0.32, z+0.04);
-    g.add(shin);
-    // 足（がっしりした楕円体）
-    const foot = makeEllipsoid(0.17, 0.08, 0.2, bodyColor, em, 0.12);
-    foot.position.set(x, y-0.58, z+0.1);
-    g.add(foot);
-    // 爪×3（足の前端から生える）
-    for (let ti = 0; ti < 3; ti++) {
-      const angle = (ti - 1) * 0.75;
-      const tx = x + Math.sin(angle) * 0.14;
-      const tz = z + 0.1 + 0.16 + Math.cos(angle) * 0.05;
-      const claw = makeCone(0.04, 0.15, c, em, 0.7);
-      claw.position.set(tx, y-0.58, tz);
-      claw.rotation.x = Math.PI/2 + 0.3;
-      claw.rotation.y = angle * 0.5;
-      g.add(claw);
-    }
-  });
-
-  // === 属性別固有パーツ ===
-  if (attr === 'fire') {
-    // ---- 角（大×2 + 小×2） ----
-    [[-0.18, 1.7, 0.6], [0.18, 1.7, 0.6]].forEach(([x,y,z]) => {
-      const horn = makeCone(0.07, s.hornH, c, em, 0.9);
-      horn.position.set(x, y, z);
-      horn.rotation.x = -0.4;
-      horn.rotation.z = x<0 ? -0.15 : 0.15;
-      g.add(horn);
-      const hornRing = makeTorus(0.08, 0.015, c, em, 0.5);
-      hornRing.position.set(x, y-0.1, z+0.04);
-      hornRing.rotation.x = -0.4;
-      g.add(hornRing);
-    });
-    [[-0.3, 1.5, 0.8], [0.3, 1.5, 0.8]].forEach(([x,y,z]) => {
-      const sideHorn = makeCone(0.04, 0.3, c, em, 0.7);
-      sideHorn.position.set(x, y, z);
-      sideHorn.rotation.x = -0.2;
-      sideHorn.rotation.z = x<0 ? -0.5 : 0.5;
-      g.add(sideHorn);
-    });
-    // ---- 翼（解剖学的バットウイング + 炎装飾） ----
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const w = buildBatWing(g, side, {
-        bc: c, be: em, bi: 0.5, mc: c, me: em, mi: 0.25,
-      });
-      // 翼先端の炎
-      const wf1 = makeSphere(0.09, '#FF8C00', em, 1.0);
-      wf1.position.set(...w.tip);
-      g.add(wf1);
-      const wf2 = makeSphere(0.05, '#FFD700', em, 1.2);
-      wf2.position.set(w.tip[0]*1.02, w.tip[1]+0.1, w.tip[2]-0.02);
-      g.add(wf2);
-      // 下スパー先端にも炎
-      const wf3 = makeSphere(0.06, '#FF8C00', em, 0.8);
-      wf3.position.set(...w.sp2);
-      g.add(wf3);
-    });
-    // ---- 尻尾（球7個 → 炎2段） ----
-    const tailData = [
-      {r:0.38,p:[0,-0.3,-1.05]},{r:0.32,p:[0,-0.45,-1.6]},{r:0.26,p:[0.08,-0.6,-2.1]},
-      {r:0.21,p:[0.16,-0.72,-2.55]},{r:0.16,p:[0.24,-0.82,-2.95]},{r:0.12,p:[0.3,-0.88,-3.3]},
-      {r:0.08,p:[0.35,-0.92,-3.6]},
-    ];
-    tailData.forEach(({r,p}) => {
-      const seg = makeSphere(r, bodyColor, em, 0.15);
-      seg.position.set(...p);
-      g.add(seg);
-    });
-    // 尻尾の鱗突起（左右交互）
-    for (let ti = 0; ti < 5; ti++) {
-      const sp = makeCone(0.035, 0.12+ti*0.01, c, em, 0.6);
-      sp.position.set((ti%2-0.5)*0.15, -0.35-ti*0.12, -1.2-ti*0.5);
-      g.add(sp);
-    }
-    // 尻尾の炎
-    const tf1 = makeEllipsoid(0.2, 0.35, 0.18, c, em, 0.9);
-    tf1.position.set(0.4, -0.85, -3.85);
-    g.add(tf1);
-    const tf2 = makeSphere(0.12, '#FF8C00', em, 1.0);
-    tf2.position.set(0.42, -0.78, -4.0);
-    g.add(tf2);
-    const tf3 = makeSphere(0.06, '#FFD700', em, 1.2);
-    tf3.position.set(0.45, -0.72, -4.1);
-    g.add(tf3);
-    // ---- 背びれ（コーン8本 + 根本リング） ----
-    for (let i = 0; i < 8; i++) {
-      const h = 0.2 + (i%2)*0.16 + i*0.015;
-      const spine = makeCone(0.04, h, i%2===0 ? c : '#FF8C00', em, 0.7);
-      spine.position.set(0, 0.56+i*0.015, -0.3+i*0.18);
-      g.add(spine);
-      if (i % 2 === 0) {
-        const ring = makeTorus(0.045, 0.01, c, em, 0.4);
-        ring.position.set(0, 0.53+i*0.015, -0.3+i*0.18);
-        g.add(ring);
-      }
-    }
-    // ---- 体の炎模様（体表面に小さい楕円を散りばめ） ----
-    for (let i = 0; i < 6; i++) {
-      const angle = i * 1.05;
-      const mark = makeEllipsoid(0.06, 0.04, 0.12, c, em, 0.5+i*0.08);
-      mark.position.set(Math.sin(angle)*s.bRx*0.85, -0.2+Math.cos(angle)*0.3, -0.1+i*0.15);
-      mark.rotation.z = angle;
-      g.add(mark);
-    }
-
-  }
-
-  // === 育成タイプによる追加装飾 ===
-  if (type === 'attacker') {
-    // アタッカー：大きな爪 + 牙 + 額の傷跡
-    legPositions.forEach(([x,y,z], li) => {
-      const isFront = li < 2;
-      const clawY = isFront ? y-0.54 : y-0.6;
-      const clawZ = isFront ? z+0.18 : z+0.22;
-      const bigClaw = makeCone(0.065, 0.28, c, em, 0.9);
-      bigClaw.position.set(x, clawY, clawZ);
-      bigClaw.rotation.x = 0.6;
-      g.add(bigClaw);
-    });
-    [[-0.1, 1.02, 1.18], [0.1, 1.02, 1.18]].forEach(([x,y,z]) => {
-      const fang = makeCone(0.035, 0.18, '#ffffff', '#ffffff', 0.8);
-      fang.position.set(x, y, z);
-      fang.rotation.x = Math.PI;
-      g.add(fang);
-    });
-    // 額の傷跡（3本の短いシリンダー）
-    for (let i = 0; i < 3; i++) {
-      const scar = makeCylinder(0.008, 0.008, 0.12, c, em, 0.6);
-      scar.position.set(-0.06+i*0.06, 1.45+i*0.015, 1.0);
-      scar.rotation.z = 0.4;
-      g.add(scar);
-    }
-  } else if (type === 'tank') {
-    // タンク：装甲プレート×5 + 肩ガード大 + 尻尾の鎧
-    for (let i = 0; i < 5; i++) {
-      const plate = makeEllipsoid(s.bRx*0.28, 0.08, 0.25, c, em, 0.35+i*0.04);
-      plate.position.set(0, 0.72+i*0.035, -0.45+i*0.28);
-      g.add(plate);
-    }
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const shoulder = makeEllipsoid(0.2, 0.16, 0.22, c, em, 0.45);
-      shoulder.position.set(side*0.75, 0.3, 0.22);
-      g.add(shoulder);
-      const shoulderSpike = makeCone(0.035, 0.15, c, em, 0.7);
-      shoulderSpike.position.set(side*0.9, 0.42, 0.22);
-      shoulderSpike.rotation.z = side*(-0.3);
-      g.add(shoulderSpike);
-    });
-  } else if (type === 'speedster') {
-    // スピード：翼ブースター + 流線型ヒレ + 尻尾の推進フィン
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const booster = makeEllipsoid(0.09, 0.14, 0.35, c, em, 0.9);
-      booster.position.set(side*2.0, 0.3, -0.7);
-      booster.rotation.z = side*0.3;
-      g.add(booster);
-      const boosterGlow = makeSphere(0.05, '#ffffff', c, 1.0);
-      boosterGlow.position.set(side*2.0, 0.3, -0.95);
-      g.add(boosterGlow);
-    });
-    [[-1, 0], [1, 0]].forEach(([side]) => {
-      const fin = makeEllipsoid(0.28, 0.04, 0.4, c, em, 0.5);
-      fin.position.set(side*1.15, -0.15, -0.4);
-      g.add(fin);
-    });
-    // 尻尾フィン
-    const tailFin = makeEllipsoid(0.2, 0.03, 0.25, c, em, 0.6);
-    tailFin.position.set(0, -0.65, -2.5);
-    g.add(tailFin);
-  }
-
-  addAttrEffect(g, attr, 'adult');
-  return g;
-}
-
-// 属性ごとのエフェクトパーティクル（スムーズ球）
-function addAttrEffect(group, attr, stage) {
-  const c = hexToThreeColor(ATTR[attr].color);
-  const count = stage === 'adult' ? 30 : 20;
-  for (let i = 0; i < count; i++) {
-    const size = 0.04 + Math.random() * 0.06;
-    const geo = new THREE.SphereGeometry(size, 8, 6);
-    const mat = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending });
-    const mesh = new THREE.Mesh(geo, mat);
-    const angle = Math.random() * Math.PI * 2;
-    const radius = 0.8 + Math.random() * (stage === 'adult' ? 2.0 : 1.0);
-    mesh.position.set(
-      Math.cos(angle) * radius,
-      (Math.random() - .5) * (stage === 'adult' ? 3 : 2),
-      Math.sin(angle) * radius
-    );
-    mesh.userData = {
-      baseAngle: angle, radius,
-      speed: 0.3 + Math.random() * 0.5,
-      yOffset: Math.random() * Math.PI * 2,
-      ySpeed: 0.5 + Math.random() * 0.5,
-    };
-    group.add(mesh);
-    attrEffectParticles.push(mesh);
-  }
-}
-
-// ---- 育成UI ----
-function setupRaiseButtons(attr) {
-  const btnFeed    = document.getElementById('btn-feed');
-  const btnTrainAtk= document.getElementById('btn-train-atk');
-  const btnTrainDef= document.getElementById('btn-train-def');
-  const btnTrainSpd= document.getElementById('btn-train-spd');
-  const btnBattle  = document.getElementById('btn-go-battle');
-
-  btnFeed.onclick     = () => doAction('feed');
-  btnTrainAtk.onclick = () => doAction('train-atk');
-  btnTrainDef.onclick = () => doAction('train-def');
-  btnTrainSpd.onclick = () => doAction('train-spd');
-  btnBattle.onclick   = () => {
-    showScreen('battle');
-    initBattleScene(attr);
-  };
-}
-
-function doAction(type) {
-  if (state.stamina <= 0) {
-    showActionFeedback('💤 スタミナ切れ！');
+  if (hatching) return;
+  if (!hatchScene || currentScreen !== 'hatch') {
+    // 放置中に孵化していた（起動時の時刻差計算）
+    state.stage = 'baby';
+    state.idleAt = Date.now();
     return;
   }
+  hatching = true;
+  Music.stinger('hatch');
+  hatchScene.hatch();
+  setTimeout(() => {
+    state.stage = 'baby';
+    state.idleAt = Date.now();
+    saveGame();
+    enterRaise();
+    toast('孵化した！', 'critical');
+  }, 2000);
+}
+
+// ============================================================
+// 育成
+// ============================================================
+let raiseScene = null;
+
+function enterRaise() {
+  raiseScene = createRaiseScene(state.attr, state.stage, state.dragonType);
+  Stage.set(raiseScene);
+  setSigil($('raise-sigil'), state.attr);
+  showScreen('raise');
+  updateRaiseUI();
+}
+
+const TRAIN_BUTTONS = { 'btn-feed': 'feed', 'btn-train-atk': 'train-atk', 'btn-train-def': 'train-def', 'btn-train-spd': 'train-spd' };
+
+function doAction(type) {
+  Music.unlock();
+  tickTimers();
+  if (state.stamina <= 0) {
+    Music.sfx('nostamina');
+    toast('スタミナ切れ — 勝利か時間経過で回復');
+    return;
+  }
+  if (state.stamina >= STA_MAX) state.staNext = Date.now() + STA_RECOVER_MS;
   state.stamina--;
-  if (state.stamina < STA_MAX && staNextRecovery === 0) {
-    staNextRecovery = Date.now() + STA_RECOVER_MS;
-  }
 
+  const t = TRAINING[type];
   const mult = rollTrainingMult();
-  let growPt = 0;
-  let msg = '';
+  const gain = calcTrainingGain(type, state.trained, state.level, mult);
+  state.trained[t.stat] += gain;
+  if (t.stat !== 'hp') state.trainCount[t.stat]++;
 
-  switch (type) {
-    case 'feed':
-      state.stats.hp += 15 * mult;
-      growPt = 2;
-      msg = mult >= 3 ? '🍖 大喜び！ ×3!!' : mult >= 2 ? '🍖 おいし！ ×2' : '🍖 もぐもぐ';
-      break;
-    case 'train-atk':
-      state.stats.atk += 2 * mult;
-      state.trainCount.atk++;
-      growPt = 3;
-      msg = mult >= 3 ? '⚔️ CRITICAL!! ×3' : mult >= 2 ? '⚔️ ATK UP ×2' : '⚔️ ATK UP';
-      break;
-    case 'train-def':
-      state.stats.def += 2 * mult;
-      state.trainCount.def++;
-      growPt = 3;
-      msg = mult >= 3 ? '🛡️ CRITICAL!! ×3' : mult >= 2 ? '🛡️ DEF UP ×2' : '🛡️ DEF UP';
-      break;
-    case 'train-spd':
-      state.stats.spd += 2 * mult;
-      state.trainCount.spd++;
-      growPt = 3;
-      msg = mult >= 3 ? '🏃 CRITICAL!! ×3' : mult >= 2 ? '🏃 SPD UP ×2' : '🏃 SPD UP';
-      break;
+  const prevType = state.dragonType;
+  state.dragonType = decideDragonType(state.trainCount);
+
+  const head = mult >= 3 ? '大成功！ ' : mult >= 2 ? '成功！ ' : '';
+  toast(`${head}${STAT_LABEL[t.stat]} +${gain}`, mult >= 3 ? 'critical' : '');
+  Music.sfx(type === 'feed' ? 'feed' : 'train', { mult });
+  if (type === 'feed' && mult > 1) Music.sfx('train', { mult });
+  bumpStat(t.stat);
+  raiseScene.react(mult);
+
+  addGrowth(t.growth);
+  if (state.dragonType !== prevType && state.stage === 'adult') {
+    raiseScene.setDragon('adult', state.dragonType, false);
+    setTimeout(() => toast(`${DRAGON_TYPES[state.dragonType].label}に変化した`), 900);
   }
-
-  updateDragonType();
-  showActionFeedback(msg, mult >= 3);
-  addGrowthPt(growPt);
   updateRaiseUI();
   saveGame();
 }
 
-function rollTrainingMult() {
-  const r = Math.random();
-  if (r < 0.15) return 3; // 15%: ×3 CRITICAL
-  if (r < 0.40) return 2; // 25%: ×2 NICE
-  return 1;               // 60%: 通常
+function bumpStat(stat) {
+  const row = document.querySelector(`.stat-row[data-stat="${stat}"]`);
+  if (!row) return;
+  row.classList.remove('bump');
+  void row.offsetWidth;
+  row.classList.add('bump');
 }
 
-function updateStaminaUI() {
-  const wrap = document.getElementById('stamina-dots');
-  if (!wrap) return;
-  wrap.innerHTML = '';
-  for (let i = 0; i < STA_MAX; i++) {
-    const dot = document.createElement('div');
-    dot.className = 'sta-dot' + (i < state.stamina ? ' filled' : '');
-    wrap.appendChild(dot);
-  }
-  const timeEl = document.getElementById('sta-recover-time');
-  if (!timeEl) return;
-  if (state.stamina >= STA_MAX) {
-    timeEl.textContent = '';
-  } else {
-    const rem = Math.max(0, Math.ceil((staNextRecovery - Date.now()) / 1000));
-    timeEl.textContent = `${rem}s`;
-  }
-}
-
-function updateDragonType() {
-  const { atk, def, spd } = state.trainCount;
-  const total = atk + def + spd;
-  if (total < 3) { state.dragonType = 'balanced'; return; }
-  const max = Math.max(atk, def, spd);
-  const threshold = total * 0.5;
-  if (max < threshold) { state.dragonType = 'balanced'; }
-  else if (atk === max) { state.dragonType = 'attacker'; }
-  else if (def === max) { state.dragonType = 'tank'; }
-  else                  { state.dragonType = 'speedster'; }
-  updateTypeLabelUI();
-}
-
-function updateTypeLabelUI() {
-  const el = document.getElementById('dragon-type-label');
-  if (!el) return;
-  const t = DRAGON_TYPES[state.dragonType];
-  el.textContent = `${t.label} ／ 必殺技：${t.special}`;
-}
-
-let feedbackTimeout = null;
-function showActionFeedback(msg, isCritical = false) {
-  const el = document.getElementById('action-feedback');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.opacity = '1';
-  el.classList.toggle('feedback-critical', isCritical);
-  clearTimeout(feedbackTimeout);
-  feedbackTimeout = setTimeout(() => {
-    el.style.opacity = '0';
-    el.classList.remove('feedback-critical');
-  }, 1500);
-}
-
-function addGrowthPt(pt) {
+function addGrowth(pt) {
   if (state.stage !== 'baby') return;
-  state.growthPt = Math.min(state.growthPt + pt, RAISE_MAX);
-  updateRaiseUI();
+  state.growthPt = Math.min(RAISE_MAX, state.growthPt + pt);
   if (state.growthPt >= RAISE_MAX) doEvolve();
 }
 
 function doEvolve() {
-  clearInterval(raiseIdleTimer);
   state.stage = 'adult';
-  buildDragonModel(state.attr, 'adult');
-  updateRaiseUI();
   saveGame();
+  Music.stinger('evolve');
+  Music.set({ adult: true });
+  if (raiseScene && Stage.current === raiseScene) {
+    raiseScene.setDragon('adult', state.dragonType, true);
+    setTimeout(() => toast('成体に進化した！', 'critical'), 400);
+  }
+  updateRaiseUI();
 }
 
 function updateRaiseUI() {
-  const attr = state.attr;
-  if (!attr) return;
+  if (!state.attr || state.stage === 'egg') return;
+  const s = playerStats();
+  $('raise-attr-label').textContent = ATTR[state.attr].name;
+  $('raise-stage-label').textContent = (state.stage === 'adult' ? '成体' : '幼体') + ' ・ ' + ATTR[state.attr].role;
+  $('raise-level').textContent = state.level;
 
-  const label = document.getElementById('raise-attr-label');
-  if (label) label.textContent = ATTR[attr].name;
+  const need = expToNext(state.level);
+  $('raise-exp-text').textContent = state.level >= LEVEL_MAX ? 'MAX' : `${state.exp} / ${need}`;
+  $('raise-exp-fill').style.width = (state.level >= LEVEL_MAX ? 100 : state.exp / need * 100) + '%';
 
-  const stageLabel = document.getElementById('raise-stage-label');
-  if (stageLabel) stageLabel.textContent = state.stage === 'baby' ? '幼体' : '成体';
-
-  // ステータスバー（成体最大値を200として相対表示）
-  const maxVal = 200;
-  const stats = state.stats;
-
-  const updateStat = (id, val) => {
-    const bar = document.getElementById(`stat-${id}-bar`);
-    const valEl = document.getElementById(`stat-${id}-val`);
-    if (bar) {
-      bar.style.width = Math.min(val / maxVal * 100, 100) + '%';
-      bar.style.background = ATTR[attr].color;
-      bar.style.boxShadow = `0 0 6px ${ATTR[attr].color}`;
-    }
-    if (valEl) valEl.textContent = val;
-  };
-
-  updateStat('hp',  stats.hp);
-  updateStat('atk', stats.atk);
-  updateStat('def', stats.def);
-  updateStat('spd', stats.spd);
-
-  // 成長ゲージ
-  const fill = document.getElementById('raise-gauge-fill');
-  const progress = document.getElementById('raise-stage-progress');
   if (state.stage === 'baby') {
-    if (fill) {
-      fill.style.width = (state.growthPt / RAISE_MAX * 100) + '%';
-      fill.style.background = ATTR[attr].color;
-      fill.style.boxShadow = `0 0 8px ${ATTR[attr].color}`;
-    }
-    if (progress) progress.textContent = `${state.growthPt} / ${RAISE_MAX}`;
+    $('raise-stage-progress').textContent = `${state.growthPt} / ${RAISE_MAX}`;
+    $('raise-gauge-fill').style.width = (state.growthPt / RAISE_MAX * 100) + '%';
   } else {
-    if (fill) fill.style.width = '100%';
-    if (progress) progress.textContent = '成体に進化！';
+    $('raise-stage-progress').textContent = '成体';
+    $('raise-gauge-fill').style.width = '100%';
   }
-  updateTypeLabelUI();
+
+  // ステータスバー：形（得意・不得意）が分かるよう HP は 1/4 換算で相対表示
+  const norm = { hp: s.hp / 4, atk: s.atk, def: s.def, spd: s.spd };
+  const maxN = Math.max(...Object.values(norm)) * 1.1;
+  Object.keys(STAT_LABEL).forEach(k => {
+    $(`stat-${k}-bar`).style.width = (norm[k] / maxN * 100) + '%';
+    $(`stat-${k}-val`).textContent = s[k];
+  });
+
+  const ty = DRAGON_TYPES[state.dragonType];
+  $('dragon-type-label').textContent = `${ty.label} ／ ${ty.special}`;
+  $('dragon-special-label').textContent = ty.desc;
+
+  // 鍛錬ボタン：次の上昇量（通常時）を表示。効率が落ちたら Lv を上げる合図
+  Object.entries(TRAIN_BUTTONS).forEach(([id, type]) => {
+    const t = TRAINING[type];
+    const g = calcTrainingGain(type, state.trained, state.level, 1);
+    const eff = trainingEfficiency(t.stat, state.trained[t.stat], state.level);
+    const el = document.querySelector(`[data-gain="${type}"]`);
+    if (el) el.textContent = `${STAT_LABEL[t.stat]} +${g}${eff < 0.6 ? ' ・ 頭打ち' : ''}`;
+  });
+
+  const lv = state.battleLevel;
+  $('next-enemy-label').textContent = (isBossLevel(lv) ? 'BOSS ' : '') + 'Lv.' + lv;
   updateStaminaUI();
 }
 
-// ---- 育成シーンアニメーション ----
-function animateRaise() {
-  raiseAnimId = requestAnimationFrame(animateRaise);
-  const t = performance.now() * 0.001;
-
-  if (raiseControls) raiseControls.update();
-
-  if (dragonGroup) {
-    // ゆっくり浮遊
-    dragonGroup.position.y = Math.sin(t * 0.8) * 0.12;
+function updateStaminaUI() {
+  const wrap = $('stamina-dots');
+  if (wrap.children.length !== STA_MAX) {
+    wrap.innerHTML = '';
+    for (let i = 0; i < STA_MAX; i++) wrap.appendChild(document.createElement('i')).className = 'pip';
   }
-
-  // 属性エフェクトパーティクル
-  attrEffectParticles.forEach(p => {
-    const d = p.userData;
-    const angle = d.baseAngle + t * d.speed;
-    p.position.x = Math.cos(angle) * d.radius;
-    p.position.z = Math.sin(angle) * d.radius;
-    p.position.y = Math.sin(t * d.ySpeed + d.yOffset) * 0.6 + (p.position.y * 0 || 0);
-    p.material.opacity = 0.4 + Math.sin(t * 2 + d.yOffset) * 0.3;
-    p.rotation.y = t * 2;
-  });
-
-  raiseRenderer.render(raiseScene, raiseCamera);
-}
-
-// ============================================================
-// Phase5: バトルシーン
-// ============================================================
-let battleScene, battleCamera, battleRenderer, battleAnimId;
-let playerDragonGroup, enemyDragonGroup;
-let battleState = null;
-const AUTO_COMMAND_DELAY = 500; // 自動戦闘のコマンド実行遅延(ms)
-const AUTO_NEXT_BATTLE_DELAY = 1500; // 自動戦闘で次の敵へ進むまでの遅延(ms)
-
-function initBattleScene(attr) {
-  const canvas = document.getElementById('battle-canvas');
-  const W = canvas.clientWidth  || window.innerWidth;
-  const H = canvas.clientHeight || window.innerHeight;
-
-  if (battleAnimId) { cancelAnimationFrame(battleAnimId); battleAnimId = null; }
-  if (battleRenderer) { battleRenderer.dispose(); }
-
-  battleScene = new THREE.Scene();
-  const battleBg = 0x1a1020;
-  battleScene.background = new THREE.Color(battleBg);
-  battleScene.fog = new THREE.FogExp2(battleBg, 0.018);
-
-  battleCamera = new THREE.PerspectiveCamera(50, W / H, 0.1, 200);
-  battleCamera.position.set(0, 1.5, 8);
-  battleCamera.lookAt(0, 0.5, 0);
-
-  battleRenderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-  battleRenderer.setSize(W, H);
-  battleRenderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-  battleRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-  battleRenderer.toneMappingExposure = 1.2;
-
-  battleScene.add(new THREE.AmbientLight(0x889aaa, 1.0));
-  const hemi = new THREE.HemisphereLight(0xddeeff, 0x445566, 0.6);
-  battleScene.add(hemi);
-  const ptPlayer = new THREE.PointLight(hexToThreeColor(ATTR[attr].color), 1.5, 20);
-  ptPlayer.position.set(-4, 3, 4);
-  battleScene.add(ptPlayer);
-
-  const enemyAttr = getRandomEnemyAttr(attr);
-  const ptEnemy = new THREE.PointLight(hexToThreeColor(ATTR[enemyAttr].color), 1.5, 20);
-  ptEnemy.position.set(4, 3, 4);
-  battleScene.add(ptEnemy);
-
-  // 地面
-  const bGroundGeo = new THREE.PlaneGeometry(60, 60);
-  const bGroundMat = new THREE.MeshStandardMaterial({ color: battleBg, roughness: 0.9, metalness: 0.1 });
-  const bGround = new THREE.Mesh(bGroundGeo, bGroundMat);
-  bGround.rotation.x = -Math.PI / 2;
-  bGround.position.y = -0.7;
-  battleScene.add(bGround);
-
-  // プレイヤードラゴン（左）
-  playerDragonGroup = state.stage === 'adult' ? buildAdultDragon(attr) : buildBabyDragon(attr);
-  playerDragonGroup.position.set(-3, 0, 0);
-  playerDragonGroup.rotation.y = 0.6;
-  if (state.stage === 'adult') {
-    playerDragonGroup.scale.setScalar(1.1);
-  } else {
-    playerDragonGroup.scale.multiplyScalar(0.65);
+  [...wrap.children].forEach((d, i) => d.classList.toggle('filled', i < state.stamina));
+  const timeEl = $('sta-recover-time');
+  if (state.stamina >= STA_MAX || !state.staNext) timeEl.textContent = 'FULL';
+  else {
+    const rem = Math.max(0, Math.ceil((state.staNext - Date.now()) / 1000));
+    timeEl.textContent = `+1 in ${Math.floor(rem / 60)}:${String(rem % 60).padStart(2, '0')}`;
   }
-  battleScene.add(playerDragonGroup);
-
-  // 敵ドラゴン（右）：レベル20以下は幼体、21以上は成体
-  const enemyIsAdult = state.battleLevel >= 21;
-  enemyDragonGroup = enemyIsAdult ? buildAdultDragon(enemyAttr) : buildBabyDragon(enemyAttr);
-  enemyDragonGroup.position.set(3, 0, 0);
-  enemyDragonGroup.rotation.y = -0.6;  // 左向き（プレイヤー方向）
-  if (enemyIsAdult) {
-    enemyDragonGroup.scale.setScalar(1.1);
-  } else {
-    enemyDragonGroup.scale.multiplyScalar(0.65);
-  }
-  battleScene.add(enemyDragonGroup);
-
-  // バトル初期化
-  const enemyStats = calcEnemyStats(state.battleLevel);
-  battleState = {
-    playerHP: state.stats.hp,
-    playerMaxHP: state.stats.hp,
-    enemyHP: enemyStats.hp,
-    enemyMaxHP: enemyStats.hp,
-    enemyAttr,
-    enemyStats,
-    turn: 0,
-    running: true,
-    streak: state.streak,
-    playerGuarding: false,
-    enemyIntent: null,    // 敵の予告行動
-    autoMode: false,      // 自動戦闘モード
-  };
-  state.mp = MP_MAX;
-
-  updateBattleUI();
-  updateMpUI();
-  document.getElementById('battle-result').classList.add('hidden');
-  document.getElementById('battle-commands').classList.add('hidden');
-  clearBattleLog();
-
-  animateBattle();
-
-  // バトル開始（少し待ってから）
-  setTimeout(() => startTurn(), 800);
-
-  window.addEventListener('resize', () => {
-    if (!battleRenderer) return;
-    const W2 = canvas.clientWidth  || window.innerWidth;
-    const H2 = canvas.clientHeight || window.innerHeight;
-    battleCamera.aspect = W2 / H2;
-    battleCamera.updateProjectionMatrix();
-    battleRenderer.setSize(W2, H2);
-  });
+  Object.keys(TRAIN_BUTTONS).forEach(id => { $(id).disabled = state.stamina <= 0; });
 }
 
-function getRandomEnemyAttr(playerAttr) {
-  const attrs = ['fire','ice','thunder','dark'];
-  return attrs[Math.floor(Math.random() * attrs.length)];
-}
-
-function calcEnemyStats(level) {
-  return {
-    hp:  Math.round(30 * Math.pow(1.15, level - 1)),
-    atk: Math.round(8  * Math.pow(1.12, level - 1)),
-    def: Math.round(3  * Math.pow(1.08, level - 1)),
-    spd: Math.round(5  * Math.pow(1.08, level - 1)),
-  };
-}
-
-function getAttrMultiplier(attackerAttr, defenderAttr) {
-  const advantage = { fire:'ice', ice:'thunder', thunder:'fire' };
-  const disadvantage = { ice:'fire', thunder:'ice', fire:'thunder' };
-  if (advantage[attackerAttr] === defenderAttr) return 1.5;
-  if (disadvantage[attackerAttr] === defenderAttr) return 0.7;
-  return 1.0;
-}
-
-// ---- ターン開始：コマンド選択を待つ ----
-function startTurn() {
-  if (!battleState || !battleState.running) return;
-
-  // 敵の行動を予告決定
-  battleState.enemyIntent = decideEnemyIntent();
-  battleState.playerGuarding = false;
-
-  // コマンドUI表示
-  const cmdEl = document.getElementById('battle-commands');
-  cmdEl.classList.remove('hidden');
-  updateEnemyIntentUI();
-  updateMpUI();
-  setupCommandButtons();
-
-  // 自動戦闘モードの場合、自動でコマンド実行
-  if (battleState.autoMode) {
-    scheduleAutoCommand();
-  }
-}
-
-// 自動戦闘モード：AIコマンド決定
-function decideAutoCommand() {
-  // 敵が強攻撃を溜めている場合はガード優先
-  if (battleState.enemyIntent === 'heavy') {
-    return 'guard';
-  }
-  // MPが十分なら必殺技を使用
-  if (state.mp >= SPECIAL_COST) {
-    return 'special';
-  }
-  // それ以外は通常攻撃
-  return 'attack';
-}
-
-// 自動コマンド実行をスケジュール
-function scheduleAutoCommand() {
-  setTimeout(() => {
-    if (!battleState || !battleState.running || !battleState.autoMode) return;
-    const cmd = decideAutoCommand();
-    executeCommand(cmd);
-  }, AUTO_COMMAND_DELAY);
-}
-
-// 自動戦闘モード切替
-function toggleAutoMode() {
-  if (!battleState || !battleState.running) return;
-  battleState.autoMode = !battleState.autoMode;
-
-  const btn = document.getElementById('cmd-auto');
-  if (btn) {
-    btn.textContent = battleState.autoMode ? '🤖 自動 ON' : '🤖 自動';
-    btn.classList.toggle('active', battleState.autoMode);
-  }
-
-  // 自動モードON時、コマンドUIが表示中なら即座に自動行動開始
-  if (battleState.autoMode) {
-    addBattleLog('🤖 自動戦闘モード ON');
-    const cmdEl = document.getElementById('battle-commands');
-    if (cmdEl && !cmdEl.classList.contains('hidden')) {
-      scheduleAutoCommand();
+// スタミナ回復・放置成長（オフライン中も含めて時刻差で計算）
+function tickTimers() {
+  const now = Date.now();
+  if (state.stamina < STA_MAX) {
+    if (!state.staNext) state.staNext = now + STA_RECOVER_MS;
+    while (state.stamina < STA_MAX && now >= state.staNext) {
+      state.stamina++;
+      state.staNext += STA_RECOVER_MS;
     }
-  } else {
-    addBattleLog('🤖 自動戦闘モード OFF');
+    if (state.stamina >= STA_MAX) state.staNext = 0;
+  }
+  const interval = state.stage === 'egg' ? HATCH_IDLE : state.stage === 'baby' ? RAISE_IDLE : 0;
+  if (!interval) { state.idleAt = now; return; }
+  const n = Math.floor((now - (state.idleAt || now)) / interval);
+  if (n > 0) {
+    state.idleAt += n * interval;
+    if (state.stage === 'egg' && !hatching) addHatchPt(Math.min(n, HATCH_MAX));
+    else if (state.stage === 'baby') { addGrowth(n); updateRaiseUI(); }
   }
 }
 
-function decideEnemyIntent() {
-  // 敵が「強攻撃」か「通常攻撃」かをランダムに予告
-  const r = Math.random();
-  if (r < 0.3 && battleState.turn % 3 === 2) return 'heavy'; // 3ターンに1回強攻撃
-  return 'normal';
-}
+// ============================================================
+// バトル
+// ============================================================
+let battle = null;       // balance.js のバトル状態
+let battleScene = null;
+let battleId = 0;        // 非同期演出の世代管理（画面を離れたら古い演出を無効化）
+let battleBusy = false;
 
-function updateEnemyIntentUI() {
-  const el = document.getElementById('enemy-intent');
-  if (!el) return;
-  if (battleState.enemyIntent === 'heavy') {
-    el.textContent = '⚠️ 敵が力をためている…';
-    el.style.color  = '#ff5252';
-  } else {
-    el.textContent = '敵が攻撃を狙っている';
-    el.style.color  = '#7986cb';
-  }
-}
+function startBattle() {
+  if (!state.attr || state.stage === 'egg') return;
+  const id = ++battleId;
+  const level = state.battleLevel;
+  const eAttr = pickEnemyAttr(level);
+  const eStats = calcEnemyStats(level, eAttr);
+  const pStats = playerStats();
+  battle = createBattle(
+    { attr: state.attr, type: state.dragonType, stats: pStats },
+    { attr: eAttr, level, stats: eStats },
+  );
+  battleScene = createBattleScene(
+    { attr: state.attr, stage: state.stage === 'adult' ? 'adult' : 'baby', type: state.dragonType },
+    { attr: eAttr, stage: eStats.stage, type: level % 4 === 0 ? 'attacker' : 'balanced', boss: eStats.boss },
+  );
+  Stage.set(battleScene);
+  battleBusy = true;
 
-function setupCommandButtons() {
-  const type = DRAGON_TYPES[state.dragonType];
-  const spEl = document.getElementById('cmd-special');
-  const costEl = document.getElementById('mp-cost-label');
-  spEl.textContent = `✨ ${type.special}`;
-  if (costEl) costEl.textContent = ` (MP${SPECIAL_COST})`;
-
-  const canSpecial = state.mp >= SPECIAL_COST;
-  spEl.disabled = !canSpecial;
-  spEl.style.opacity = canSpecial ? '1' : '0.35';
-
-  document.getElementById('cmd-attack').onclick   = () => executeCommand('attack');
-  document.getElementById('cmd-special').onclick  = () => { if (canSpecial) executeCommand('special'); };
-  document.getElementById('cmd-guard').onclick    = () => executeCommand('guard');
-  document.getElementById('cmd-auto').onclick     = () => toggleAutoMode();
-
-  // 自動モードボタンの表示状態を更新
-  const autoBtn = document.getElementById('cmd-auto');
-  if (autoBtn && battleState) {
-    autoBtn.textContent = battleState.autoMode ? '🤖 自動 ON' : '🤖 自動';
-    autoBtn.classList.toggle('active', battleState.autoMode);
-  }
-}
-
-function executeCommand(cmd) {
-  if (!battleState || !battleState.running) return;
-  document.getElementById('battle-commands').classList.add('hidden');
-
-  const ps = state.stats;
-  const es = battleState.enemyStats;
-
-  // --- プレイヤー行動 ---
-  if (cmd === 'guard') {
-    battleState.playerGuarding = true;
-    addBattleLog('🛡️ 守りの姿勢を取った！');
-    // MPを1回復
-    state.mp = Math.min(MP_MAX, state.mp + 1);
-  } else if (cmd === 'attack') {
-    const mult = getAttrMultiplier(state.attr, battleState.enemyAttr);
-    const dmg  = Math.max(1, Math.floor((ps.atk - es.def * 0.5) * mult));
-    battleState.enemyHP = Math.max(0, battleState.enemyHP - dmg);
-    const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
-    addBattleLog(`▶ ${dmg}ダメージ${multText}`);
-    flashDragon(enemyDragonGroup);
-    state.mp = Math.min(MP_MAX, state.mp + 1);
-  } else if (cmd === 'special') {
-    state.mp -= SPECIAL_COST;
-    const mult = getAttrMultiplier(state.attr, battleState.enemyAttr);
-    const dmg  = Math.max(1, Math.floor((ps.atk * 2.2 - es.def * 0.3) * mult));
-    battleState.enemyHP = Math.max(0, battleState.enemyHP - dmg);
-    const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
-    const spName = DRAGON_TYPES[state.dragonType].special;
-    addBattleLog(`✨ ${spName}！ ${dmg}ダメージ！${multText}`);
-    flashDragon(enemyDragonGroup);
-    flashDragon(playerDragonGroup); // 必殺技自身も光る
-  }
-
+  setSigil($('bp-sigil'), state.attr);
+  setSigil($('be-sigil'), eAttr);
+  $('battle-player-name').textContent = ATTR[state.attr].name;
+  $('battle-player-lv').textContent = 'Lv.' + state.level;
+  $('battle-enemy-name').textContent = (eStats.boss ? '主・' : '野生の') + ATTR[eAttr].name;
+  const elv = $('battle-enemy-lv');
+  elv.textContent = (eStats.boss ? 'BOSS ' : '') + 'Lv.' + level;
+  elv.classList.toggle('boss', eStats.boss);
+  $('battle-log').innerHTML = '';
+  $('battle-result').classList.add('hidden');
+  $('battle-commands').classList.add('hidden');
+  $('damage-layer').innerHTML = '';
   updateBattleUI();
-  updateMpUI();
-  if (checkBattleEnd()) return;
+  updateAutoButton();
 
-  // --- 少し間を置いて敵行動 ---
-  setTimeout(() => enemyAction(), 700);
+  showScreen('battle');
+  Music.play('battle', { boss: eStats.boss, intensity: 0.2, climax: false, danger: 0, tension: 0 });
+  showBanner(eStats.boss ? 'Boss Battle' : 'Battle', eStats.boss ? `Lv.${level} ${ATTR[eAttr].short}の主` : `Lv.${level}`, eStats.boss);
+  const mult = getAttrMultiplier(state.attr, eAttr);
+  if (mult > 1) log(`相性有利 — ${ATTR[eAttr].short}に強い`, 'good');
+  else if (mult < 1) log(`相性不利 — ${ATTR[eAttr].short}に弱い`, 'bad');
+
+  setTimeout(() => { if (id === battleId) beginTurn(); }, 1500);
 }
 
-function enemyAction() {
-  if (!battleState || !battleState.running) return;
-  const es = battleState.enemyStats;
-  const ps = state.stats;
+function showBanner(eyebrow, title, boss) {
+  const el = $('battle-banner');
+  el.innerHTML = `<span class="b-eyebrow">${eyebrow}</span><span class="b-title">${title}</span>`;
+  el.className = 'banner' + (boss ? ' boss' : '');
+  void el.offsetWidth;
+  el.classList.add('show');
+}
 
-  // SPDによる回避判定（プレイヤーSPDが敵SPDより高いほど回避しやすい）
-  const speedDiff = ps.spd - es.spd;
-  const evasionChance = Math.max(0, Math.min(0.3, speedDiff * 0.012));
-  if (Math.random() < evasionChance) {
-    addBattleLog(`💨 すばやく回避した！`);
-    battleState.turn++;
-    setTimeout(() => startTurn(), 600);
-    return;
-  }
-
-  let dmg;
-  if (battleState.enemyIntent === 'heavy') {
-    // 強攻撃
-    const raw = Math.max(1, Math.floor(es.atk * 1.8 - ps.def * 0.3));
-    dmg = battleState.playerGuarding ? Math.ceil(raw * 0.4) : raw;
-    const guardText = battleState.playerGuarding ? ' (ガード！)' : '';
-    addBattleLog(`◀ 強攻撃！ ${dmg}ダメージ${guardText}`);
-  } else {
-    const mult = getAttrMultiplier(battleState.enemyAttr, state.attr);
-    const raw  = Math.max(1, Math.floor((es.atk - ps.def * 0.5) * mult));
-    dmg = battleState.playerGuarding ? Math.ceil(raw * 0.4) : raw;
-    const multText = mult > 1 ? ' 🔥効果抜群！' : mult < 1 ? ' 💧いまひとつ…' : '';
-    const guardText = battleState.playerGuarding ? ' (ガード！)' : '';
-    addBattleLog(`◀ ${dmg}ダメージ${multText}${guardText}`);
-  }
-  battleState.playerHP = Math.max(0, battleState.playerHP - dmg);
-  flashDragon(playerDragonGroup);
+function beginTurn() {
+  if (!battle || battle.over) return;
+  const id = battleId;
+  battleBusy = false;
   updateBattleUI();
-
-  if (checkBattleEnd()) return;
-
-  // 次のターンへ
-  battleState.turn++;
-  setTimeout(() => startTurn(), 600);
+  const heavy = battle.intent === 'heavy';
+  Music.set({ tension: heavy ? 1 : 0 });
+  if (heavy) {
+    Music.sfx('charge');
+    battleScene.charge('enemy', '#ff4455');
+  }
+  $('battle-commands').classList.remove('hidden');
+  $('cmd-special').disabled = !canSpecial(battle);
+  $('cmd-guard').classList.toggle('suggest', heavy);
+  if (state.autoMode) {
+    setTimeout(() => {
+      if (id !== battleId || battleBusy || !state.autoMode || !battle || battle.over) return;
+      choose(autoCommand(battle));
+    }, AUTO_COMMAND_DELAY);
+  }
 }
 
-// (旧runBattleTurnは削除 → startTurn/executeCommandに統合)
-
-function checkBattleEnd() {
-  if (battleState.playerHP <= 0) {
-    endBattle(false);
-    return true;
-  }
-  if (battleState.enemyHP <= 0) {
-    endBattle(true);
-    return true;
-  }
-  return false;
+async function choose(cmd) {
+  if (!battle || battle.over || battleBusy) return;
+  Music.unlock();
+  battleBusy = true;
+  const id = battleId;
+  $('battle-commands').classList.add('hidden');
+  const events = resolveTurn(battle, cmd);
+  await playEvents(events, id);
+  if (id !== battleId) return;
+  battleScene.shield(false);
+  updateBattleMusic();
+  if (battle.over) finishBattle(battle.winner === 'player', id);
+  else beginTurn();
 }
 
-function endBattle(win) {
-  battleState.running = false;
-  const wasAutoMode = battleState.autoMode;
-  battleState.autoMode = false;
-
-  // 自動モードボタンの表示をリセット
-  const autoBtn = document.getElementById('cmd-auto');
-  if (autoBtn) {
-    autoBtn.textContent = '🤖 自動';
-    autoBtn.classList.remove('active');
+async function playEvents(events, id) {
+  for (const ev of events) {
+    if (id !== battleId) return;
+    switch (ev.type) {
+      case 'action':
+        if (ev.who === 'player') {
+          if (ev.cmd === 'guard') {
+            battleScene.shield(true);
+            Music.sfx('guard');
+            log('守りの構え');
+            await wait(320);
+          } else if (ev.cmd === 'special') {
+            const sp = DRAGON_TYPES[ev.special].special;
+            log(`${sp}！`, 'gold');
+            Music.sfx('special');
+            battleScene.charge('player', ATTR[state.attr].color);
+            if (ev.special === 'tank') battleScene.shield(true);
+            await wait(260);
+            await battleScene.projectile('player', 'enemy', ATTR[state.attr].color);
+          } else {
+            await battleScene.lunge('player');
+          }
+        } else {
+          if (ev.cmd === 'heavy') log('敵の強攻撃！', 'bad');
+          await battleScene.lunge('enemy');
+        }
+        break;
+      case 'damage': {
+        const toEnemy = ev.target === 'enemy';
+        battleScene.hit(ev.target, ev.crit || ev.heavy);
+        if (toEnemy) Music.sfx('hit', { crit: ev.crit });
+        else Music.sfx('hurt', { heavy: ev.heavy });
+        if (ev.crit || ev.heavy) screenFlash(toEnemy ? '' : 'red');
+        popNumber(ev.target, ev.amount, { crit: ev.crit, toPlayer: !toEnemy, sub: ev.attrMult > 1 ? '効果抜群' : ev.attrMult < 1 ? 'いまひとつ' : ev.guarded ? 'ガード' : '' });
+        updateBattleUI();
+        const tag = [ev.crit ? '会心' : '', ev.attrMult > 1 ? '効果抜群' : '', ev.attrMult < 1 ? 'いまひとつ' : '', ev.guarded ? 'ガード' : ''].filter(Boolean).join('・');
+        log(`${toEnemy ? '敵に' : '自分に'} ${ev.amount} ダメージ${tag ? `（${tag}）` : ''}`, toEnemy ? '' : 'bad');
+        await wait(360);
+        break;
+      }
+      case 'evade':
+        battleScene.evade(ev.target);
+        Music.sfx('evade');
+        popNumber(ev.target, 'MISS', { miss: true });
+        log(ev.target === 'player' ? 'ひらりと回避した' : '敵に回避された', ev.target === 'player' ? 'good' : '');
+        await wait(380);
+        break;
+      case 'heal':
+        battleScene.heal(ev.target);
+        Music.sfx('heal');
+        popNumber(ev.target, '+' + ev.amount, { heal: true });
+        updateBattleUI();
+        await wait(300);
+        break;
+      case 'enrage':
+        Music.sfx('enrage');
+        showBanner('Warning', '主が激昂した', true);
+        battleScene.shake(0.3);
+        log('主の攻撃力が上がった！', 'bad');
+        await wait(700);
+        break;
+    }
   }
+}
 
+function updateBattleMusic() {
+  if (!battle) return;
+  const pr = battle.player.hp / battle.player.maxHp;
+  const er = battle.enemy.hp / battle.enemy.maxHp;
+  Music.set({
+    intensity: 0.3 + 0.7 * (1 - er),
+    danger: pr < 0.35 ? (0.35 - pr) / 0.35 * 0.85 + 0.15 : 0,
+    climax: er < 0.4 || pr < 0.35 || battle.enemy.enraged,
+    tension: 0,
+  });
+}
+
+function finishBattle(win, id) {
+  const level = battle.enemy.level;
+  const boss = battle.enemy.boss;
+  const turns = battle.turn;
+  const wasAuto = state.autoMode;
+  Music.set({ danger: 0, tension: 0 });
+  battleScene.defeat(win ? 'enemy' : 'player');
+  Music.stinger(win ? 'victory' : 'defeat');
+
+  const rewards = [];
+  const prevLevel = state.level;
+  let gainedExp;
   if (win) {
     state.streak++;
     state.totalWin++;
     state.battleLevel++;
-
-    const battleScore = state.battleLevel * 100;
-    const streakBonus = state.streak * 50;
-    const statBonus = (state.stats.hp + state.stats.atk + state.stats.def + state.stats.spd) / 5;
-    const gained = Math.round((battleScore + streakBonus) * (statBonus / 30));
-    state.score += gained;
-
-    addBattleLog(`🏆 勝利！ +${gained}pt`);
-    showBattleResult(true, gained, wasAutoMode);
+    const pts = scoreForWin(level, state.streak, boss, turns);
+    state.score += pts;
+    gainedExp = expForWin(level, boss);
+    const staBefore = state.stamina;
+    state.stamina = Math.min(STA_MAX, state.stamina + STA_PER_WIN);
+    if (state.stamina >= STA_MAX) state.staNext = 0;
+    rewards.push(['スコア', `+${pts.toLocaleString()}`, true]);
+    rewards.push(['経験値', `+${gainedExp}`]);
+    if (state.stamina > staBefore) rewards.push(['スタミナ', `+${state.stamina - staBefore}`]);
+    if (state.stage === 'baby') rewards.push(['成長', '+4']);
+    rewards.push(['連勝', `${state.streak}`]);
   } else {
-    addBattleLog('💀 敗北…');
-    showBattleResult(false, 0, false);
     state.streak = 0;
-    state.battleLevel = Math.max(1, state.battleLevel - 1);
+    gainedExp = Math.round(expForWin(level, boss) * EXP_ON_LOSE);
+    rewards.push(['経験値', `+${gainedExp}`]);
   }
+  gainExp(gainedExp);
+  if (win) addGrowth(4);
+  if (state.level > prevLevel) rewards.push(['レベル', `${prevLevel} → ${state.level}`, true]);
+  if (!win) rewards.push(['note', '鍛錬で能力を上げてから再挑戦しよう']);
 
   updateRecord();
   saveGame();
+
+  setTimeout(() => {
+    if (id !== battleId) return;
+    showBattleResult(win, boss, rewards, wasAuto && win);
+    if (state.level > prevLevel) setTimeout(() => Music.stinger('levelup'), 600);
+  }, 1300);
 }
 
-function showBattleResult(win, score, autoMode) {
-  const resultEl = document.getElementById('battle-result');
-  const titleEl  = document.getElementById('battle-result-title');
-  const scoreEl  = document.getElementById('battle-result-score');
+function gainExp(n) {
+  state.exp += n;
+  while (state.level < LEVEL_MAX && state.exp >= expToNext(state.level)) {
+    state.exp -= expToNext(state.level);
+    state.level++;
+  }
+  if (state.level >= LEVEL_MAX) state.exp = 0;
+}
 
-  resultEl.classList.remove('hidden');
-  document.getElementById('battle-commands').classList.add('hidden');
-  titleEl.textContent = win ? '🏆 勝利！' : '💀 敗北';
-  titleEl.style.color = win ? '#69f0ae' : '#ff5252';
-  scoreEl.textContent = win ? `+${score} pt` : 'スコア変化なし';
+function showBattleResult(win, boss, rewards, autoNext) {
+  const titleEl = $('battle-result-title');
+  $('battle-result-eyebrow').textContent = win ? (boss ? 'Boss Defeated' : 'Battle Won') : 'Battle Lost';
+  titleEl.textContent = win ? 'Victory' : 'Defeat';
+  titleEl.className = 'result-title ' + (win ? 'win' : 'lose');
+  $('battle-result-rewards').innerHTML = rewards.map(([k, v, hl], i) =>
+    k === 'note'
+      ? `<li class="note" style="animation-delay:${i * 70}ms">${v}</li>`
+      : `<li class="${hl ? 'hl' : ''}" style="animation-delay:${i * 70}ms"><span>${k}</span><span>${v}</span></li>`
+  ).join('');
+  $('btn-next-battle').querySelector('.t').textContent = win ? `次へ Lv.${state.battleLevel}` : '再挑戦';
+  $('battle-result').classList.remove('hidden');
 
-  const goNextBattle = () => {
-    resultEl.classList.add('hidden');
-    if (battleAnimId) cancelAnimationFrame(battleAnimId);
-    showScreen('battle');
-    initBattleScene(state.attr);
-  };
-
-  document.getElementById('btn-next-battle').onclick = goNextBattle;
-  document.getElementById('btn-back-raise').onclick = () => {
-    if (battleAnimId) cancelAnimationFrame(battleAnimId);
-    showScreen('raise');
-    initRaiseScene(state.attr);
-  };
-
-  // 自動戦闘モードがONだった場合、勝利時は自動で次の敵へ
-  if (win && autoMode) {
-    addBattleLog('🤖 自動で次の敵へ…');
+  if (autoNext) {
+    const id = battleId;
     setTimeout(() => {
-      goNextBattle();
-      // 次の戦闘でも自動モードをONにする（startTurnが自動コマンドを開始する）
-      if (battleState) {
-        battleState.autoMode = true;
-        const autoBtn = document.getElementById('cmd-auto');
-        if (autoBtn) {
-          autoBtn.textContent = '🤖 自動 ON';
-          autoBtn.classList.add('active');
-        }
-      }
+      if (id === battleId && state.autoMode && currentScreen === 'battle') startBattle();
     }, AUTO_NEXT_BATTLE_DELAY);
   }
 }
 
+// 戦闘中に画面を離れた＝撤退（連勝は途切れる）
+function abandonBattle() {
+  battleId++;
+  if (battle && !battle.over) {
+    state.streak = 0;
+    saveGame();
+    setTimeout(() => toast('撤退した（連勝リセット）'), 300);
+  }
+  battle = null;
+  battleBusy = false;
+  $('battle-commands').classList.add('hidden');
+  $('battle-result').classList.add('hidden');
+}
+
 function updateBattleUI() {
-  if (!battleState) return;
-  document.getElementById('battle-player-name').textContent = ATTR[state.attr].name;
-  document.getElementById('battle-enemy-name').textContent  = ATTR[battleState.enemyAttr].name + ` Lv.${state.battleLevel}`;
+  if (!battle) return;
+  const setHp = (who, cur, max) => {
+    const r = cur / max;
+    const fill = $(`battle-${who}-hp-bar`);
+    fill.style.width = (r * 100) + '%';
+    if (who === 'player') fill.classList.toggle('low', r < 0.3);
+    $(`battle-${who}-hp-ghost`).style.width = (r * 100) + '%';
+    $(`battle-${who}-hp-text`).textContent = `${cur} / ${max}`;
+  };
+  setHp('player', battle.player.hp, battle.player.maxHp);
+  setHp('enemy', battle.enemy.hp, battle.enemy.maxHp);
+  $('battle-turn').textContent = battle.turn + 1;
 
-  const pRatio = battleState.playerHP / battleState.playerMaxHP;
-  const eRatio = battleState.enemyHP  / battleState.enemyMaxHP;
-  document.getElementById('battle-player-hp-bar').style.width = (pRatio * 100) + '%';
-  document.getElementById('battle-enemy-hp-bar').style.width  = (eRatio * 100) + '%';
-  document.getElementById('battle-player-hp-text').textContent = `${battleState.playerHP} / ${battleState.playerMaxHP}`;
-  document.getElementById('battle-enemy-hp-text').textContent  = `${battleState.enemyHP} / ${battleState.enemyMaxHP}`;
-}
-
-function updateMpUI() {
-  const bar  = document.getElementById('mp-bar');
-  const text = document.getElementById('mp-text');
-  if (bar)  bar.style.width  = (state.mp / MP_MAX * 100) + '%';
-  if (text) text.textContent = `${state.mp}/${MP_MAX}`;
-}
-
-function addBattleLog(msg) {
-  const log = document.getElementById('battle-log');
-  if (!log) return;
-  const line = document.createElement('div');
-  line.textContent = msg;
-  line.className = 'battle-log-line fade-in';
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
-}
-
-function clearBattleLog() {
-  const log = document.getElementById('battle-log');
-  if (log) log.innerHTML = '';
-}
-
-// ドラゴンをフラッシュ（被ダメ演出）
-function flashDragon(group) {
-  if (!group) return;
-  group.children.forEach(child => {
-    if (child.material) {
-      const orig = child.material.emissiveIntensity || 0;
-      child.material.emissiveIntensity = 2.0;
-      setTimeout(() => { child.material.emissiveIntensity = orig; }, 200);
-    }
+  const pips = $('mp-pips');
+  if (pips.children.length !== MP_MAX) {
+    pips.innerHTML = '';
+    for (let i = 0; i < MP_MAX; i++) pips.appendChild(document.createElement('i')).className = 'mp-pip';
+  }
+  [...pips.children].forEach((p, i) => {
+    p.classList.toggle('on', i < battle.mp);
+    p.classList.toggle('ready', i < battle.mp && battle.mp >= SPECIAL_COST);
   });
+
+  const intent = $('enemy-intent');
+  if (battle.over) { intent.textContent = ''; intent.className = 'intent'; }
+  else if (battle.intent === 'heavy') { intent.textContent = '力をためている — 守りで軽減'; intent.className = 'intent heavy'; }
+  else { intent.textContent = battle.enemy.enraged ? '激昂中' : '様子をうかがっている'; intent.className = 'intent'; }
+
+  const ty = DRAGON_TYPES[state.dragonType];
+  $('cmd-special-name').textContent = ty.special;
+  $('mp-cost-label').textContent = `MP ${SPECIAL_COST} ・ ${ty.desc.split('・')[0]}`;
 }
 
-function animateBattle() {
-  battleAnimId = requestAnimationFrame(animateBattle);
-  const t = performance.now() * 0.001;
+function log(msg, kind = '') {
+  const box = $('battle-log');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (kind ? ' ' + kind : '');
+  line.textContent = msg;
+  box.appendChild(line);
+  while (box.children.length > 3) box.removeChild(box.firstChild);
+  [...box.children].forEach((c, i, arr) => c.classList.toggle('old', i < arr.length - 1));
+}
 
-  if (playerDragonGroup) {
-    playerDragonGroup.position.y = Math.sin(t * 1.1) * 0.1;
-  }
-  if (enemyDragonGroup) {
-    enemyDragonGroup.position.y = Math.sin(t * 1.3 + 1) * 0.1;
-  }
+function popNumber(who, value, opts = {}) {
+  if (!battleScene) return;
+  const pos = battleScene.screenPos(who);
+  const el = document.createElement('div');
+  el.className = 'dmg' + (opts.crit ? ' crit' : '') + (opts.toPlayer ? ' to-player' : '') + (opts.heal ? ' heal' : '') + (opts.miss ? ' miss' : '');
+  el.style.left = (pos.x + (Math.random() - 0.5) * 40) + 'px';
+  el.style.top = pos.y + 'px';
+  el.innerHTML = `${opts.crit ? '<small>CRITICAL</small>' : ''}${value}${opts.sub ? `<small>${opts.sub}</small>` : ''}`;
+  $('damage-layer').appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
 
-  battleRenderer.render(battleScene, battleCamera);
+function screenFlash(kind) {
+  const el = document.createElement('div');
+  el.className = 'flash-overlay' + (kind ? ' ' + kind : '');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 400);
+}
+
+function updateAutoButton() {
+  $('cmd-auto').setAttribute('aria-pressed', state.autoMode ? 'true' : 'false');
+}
+
+function toggleAutoMode() {
+  Music.unlock();
+  Music.sfx('ui');
+  state.autoMode = !state.autoMode;
+  updateAutoButton();
+  saveGame();
+  if (state.autoMode && battle && !battle.over && !battleBusy && !$('battle-commands').classList.contains('hidden')) {
+    choose(autoCommand(battle));
+  }
 }
 
 // ============================================================
-// Phase6: スコア・記録
+// 記録
 // ============================================================
+function loadBestRecord() {
+  try { return JSON.parse(localStorage.getItem(BEST_KEY)) || {}; } catch (e) { return {}; }
+}
+
 function updateRecord() {
   const saved = loadBestRecord();
-  const bestScore = Math.max(state.score, saved.bestScore || 0);
-  const bestStreak = Math.max(state.streak, saved.bestStreak || 0);
-  const totalWin = Math.max(state.totalWin, saved.totalWin || 0);
+  const best = {
+    bestScore:  Math.max(state.score, saved.bestScore || 0),
+    bestStreak: Math.max(state.streak, saved.bestStreak || 0),
+    totalWin:   Math.max(state.totalWin, saved.totalWin || 0),
+    bestLevel:  Math.max(state.battleLevel - 1, saved.bestLevel || 0),
+  };
+  try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch (e) { /* noop */ }
+  return best;
+}
 
-  localStorage.setItem(SAVE_KEY + '_best', JSON.stringify({ bestScore, bestStreak, totalWin }));
+let resetArmed = false;
+let resetTimer = null;
 
-  const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-  el('rec-best-score',  bestScore);
-  el('rec-best-streak', bestStreak);
-  el('rec-total-win',   totalWin);
+function showRecord() {
+  const best = updateRecord();
+  $('rec-best-score').textContent = best.bestScore.toLocaleString();
+  $('rec-best-streak').textContent = best.bestStreak;
+  $('rec-total-win').textContent = best.totalWin;
+  $('rec-best-level').textContent = best.bestLevel ? 'Lv.' + best.bestLevel : '—';
+  $('rec-current').textContent = state.attr && state.stage !== 'egg'
+    ? `いまの竜：${ATTR[state.attr].name} Lv.${state.level}（${state.stage === 'adult' ? '成体' : '幼体'}・${DRAGON_TYPES[state.dragonType].label}） ／ スコア ${state.score.toLocaleString()}`
+    : '';
+  resetArmed = false;
+  $('btn-reset').textContent = '新しい卵から始める';
+  $('btn-reset').classList.remove('confirm');
+  showScreen('record');
+}
+
+function onReset() {
+  const btn = $('btn-reset');
+  if (!resetArmed) {
+    resetArmed = true;
+    btn.textContent = 'もう一度押すと今の竜とお別れします';
+    btn.classList.add('confirm');
+    clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => {
+      resetArmed = false;
+      btn.textContent = '新しい卵から始める';
+      btn.classList.remove('confirm');
+    }, 3500);
+    return;
+  }
+  updateRecord();
+  const keepAuto = state.autoMode;
+  state = freshState();
+  state.autoMode = keepAuto;
+  try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* noop */ }
+  applyAttrTheme(null);
+  showScreen('select');
 }
 
 // ============================================================
 // セーブ / ロード
 // ============================================================
 function saveGame() {
-  const data = {
-    attr: state.attr,
-    stage: state.stage,
-    hatchPt: state.hatchPt,
-    growthPt: state.growthPt,
-    stats: state.stats,
-    score: state.score,
-    streak: state.streak,
-    totalWin: state.totalWin,
-    battleLevel: state.battleLevel,
-    trainCount: state.trainCount,
-    dragonType: state.dragonType,
-    stamina: state.stamina,
-    savedAt: Date.now(),
-  };
-  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  if (!state.attr) return;
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ ...state, savedAt: Date.now() })); } catch (e) { /* noop */ }
 }
 
 function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
 }
 
-function loadBestRecord() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY + '_best');
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-// ============================================================
-// ナビゲーション
-// ============================================================
-document.getElementById('nav-raise').addEventListener('click', () => {
-  if (state.attr) {
-    showScreen('raise');
-    if (!raiseRenderer) initRaiseScene(state.attr);
-  }
-});
-
-document.getElementById('nav-battle').addEventListener('click', () => {
-  if (state.attr) {
-    showScreen('battle');
-    initBattleScene(state.attr);
-  }
-});
-
-document.getElementById('nav-record').addEventListener('click', () => {
-  showScreen('record');
-  const best = loadBestRecord();
-  const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
-  el('rec-best-score',  best.bestScore  || 0);
-  el('rec-best-streak', best.bestStreak || 0);
-  el('rec-total-win',   best.totalWin   || 0);
-});
-
-document.getElementById('btn-back-from-record').addEventListener('click', () => {
-  showScreen(state.attr ? 'raise' : 'select');
-});
-
-// BGMミュートボタン
-document.getElementById('bgm-toggle').addEventListener('click', () => {
-  const m = BGM.toggleMute();
-  document.getElementById('bgm-toggle').textContent = m ? '🔇' : '🔊';
-});
-// 初回タップでAudioContext起動
-document.addEventListener('click', () => { BGM.getCtx(); }, { once: true });
-
-// ============================================================
-// 起動：セーブデータがあれば復元
-// ============================================================
-(function init() {
-  const saved = loadGame();
-  if (saved.attr) {
-    // セーブデータ復元
-    Object.assign(state, {
-      attr: saved.attr,
-      stage: saved.stage,
-      hatchPt: saved.hatchPt,
-      growthPt: saved.growthPt,
-      stats: saved.stats,
-      score: saved.score || 0,
-      streak: saved.streak || 0,
-      totalWin: saved.totalWin || 0,
-      battleLevel: saved.battleLevel || 1,
-      trainCount: saved.trainCount || { atk: 0, def: 0, spd: 0 },
-      dragonType: saved.dragonType || 'balanced',
-      stamina: saved.stamina ?? STA_MAX,
+// v2 以前のセーブ（ステータス累積型）を v3（Lv＋鍛錬量）へ移行
+function migrateSave(saved) {
+  if (!saved || !saved.attr || !ATTR[saved.attr]) return null;
+  if (saved.v === SAVE_VERSION) return Object.assign(freshState(), saved);
+  const s = freshState();
+  s.attr = saved.attr;
+  s.stage = ['egg', 'baby', 'adult'].includes(saved.stage) ? saved.stage : 'egg';
+  s.hatchPt = saved.hatchPt || 0;
+  s.growthPt = Math.min(RAISE_MAX, Math.round((saved.growthPt || 0) * RAISE_MAX / 50));
+  s.battleLevel = Math.max(1, Math.min(60, saved.battleLevel || 1));
+  s.level = Math.max(1, s.battleLevel - 1);
+  s.score = saved.score || 0;
+  s.streak = saved.streak || 0;
+  s.totalWin = saved.totalWin || 0;
+  s.trainCount = saved.trainCount || s.trainCount;
+  s.dragonType = saved.dragonType || decideDragonType(s.trainCount);
+  s.stamina = Math.min(STA_MAX, saved.stamina ?? STA_MAX);
+  s.idleAt = saved.savedAt || Date.now();
+  if (s.stamina < STA_MAX) s.staNext = s.idleAt + STA_RECOVER_MS; // 放置中の回復も計上
+  if (saved.stats) {
+    const base = calcStats({ attr: s.attr, level: s.level, stage: s.stage === 'adult' ? 'adult' : 'baby', trained: {} });
+    Object.keys(STAT_LABEL).forEach(k => {
+      s.trained[k] = clamp(Math.round((saved.stats[k] || 0) - base[k]), 0, Math.round(trainingCap(k, s.level)));
     });
-    // 放置中のスタミナ回復
-    if (saved.savedAt && state.stamina < STA_MAX) {
-      const recovered = Math.floor((Date.now() - saved.savedAt) / STA_RECOVER_MS);
-      state.stamina = Math.min(STA_MAX, state.stamina + recovered);
-    }
-
-    // 放置中の成長を計算
-    if (saved.savedAt) {
-      const elapsed = Date.now() - saved.savedAt;
-      if (state.stage === 'egg') {
-        const gained = Math.floor(elapsed / HATCH_IDLE);
-        state.hatchPt = Math.min(state.hatchPt + gained, HATCH_MAX);
-      } else if (state.stage === 'baby') {
-        const gained = Math.floor(elapsed / RAISE_IDLE);
-        state.growthPt = Math.min(state.growthPt + gained, RAISE_MAX);
-        if (state.growthPt >= RAISE_MAX) state.stage = 'adult';
-      }
-    }
-
-    document.documentElement.style.setProperty('--current-attr', ATTR[state.attr].color);
-
-    if (state.stage === 'egg') {
-      showScreen('hatch');
-      initHatchScene(state.attr);
-    } else {
-      showScreen('raise');
-      mainNav.classList.remove('hidden');
-      initRaiseScene(state.attr);
-    }
-  } else {
-    showScreen('select');
   }
-})();
+  return s;
+}
 
 // ============================================================
-// 向き検知（縦画面オーバーレイ表示）
+// イベント
 // ============================================================
-const orientOverlay = document.getElementById('orientation-overlay');
+function bindEvents() {
+  Object.entries(TRAIN_BUTTONS).forEach(([id, type]) => { $(id).addEventListener('click', () => doAction(type)); });
+  $('btn-go-battle').addEventListener('click', () => { Music.sfx('select'); startBattle(); });
+  $('screen-hatch').addEventListener('pointerdown', onHatchTap);
 
+  $('cmd-attack').addEventListener('click', () => choose('attack'));
+  $('cmd-special').addEventListener('click', () => { if (battle && canSpecial(battle)) choose('special'); });
+  $('cmd-guard').addEventListener('click', () => choose('guard'));
+  $('cmd-auto').addEventListener('click', toggleAutoMode);
+  $('btn-next-battle').addEventListener('click', () => { Music.sfx('select'); startBattle(); });
+  $('btn-back-raise').addEventListener('click', () => { Music.sfx('ui'); enterRaise(); });
+
+  $('nav-raise').addEventListener('click', () => {
+    if (!state.attr || state.stage === 'egg' || currentScreen === 'raise') return;
+    Music.sfx('ui');
+    enterRaise();
+  });
+  $('nav-battle').addEventListener('click', () => {
+    if (!state.attr || state.stage === 'egg') return;
+    if (currentScreen === 'battle' && battle && !battle.over) return;
+    Music.sfx('ui');
+    startBattle();
+  });
+  $('nav-record').addEventListener('click', () => { Music.sfx('ui'); showRecord(); });
+  $('btn-back-from-record').addEventListener('click', () => {
+    Music.sfx('ui');
+    if (state.attr && state.stage !== 'egg') enterRaise();
+    else showScreen('select');
+  });
+  $('btn-reset').addEventListener('click', onReset);
+
+  const soundIcon = () => { $('bgm-toggle').innerHTML = `<svg><use href="#${Music.isMuted() ? 'i-mute' : 'i-sound'}"/></svg>`; };
+  $('bgm-toggle').addEventListener('click', () => { Music.unlock(); Music.toggleMute(); soundIcon(); });
+  soundIcon();
+
+  // 最初の操作でオーディオを起動（ブラウザの自動再生制限対策）
+  document.addEventListener('pointerdown', () => Music.unlock(), { once: true });
+  document.addEventListener('keydown', () => Music.unlock(), { once: true });
+
+  // キーボード操作（バトル：1/2/3、A=自動）
+  document.addEventListener('keydown', e => {
+    if (currentScreen !== 'battle') return;
+    if (e.key === '1') $('cmd-attack').click();
+    else if (e.key === '2') $('cmd-special').click();
+    else if (e.key === '3') $('cmd-guard').click();
+    else if (e.key === 'a' || e.key === 'A') toggleAutoMode();
+  });
+
+  document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame(); else if (state.attr) tickTimers(); });
+
+  setInterval(() => {
+    if (!state.attr) return;
+    tickTimers();
+    if (currentScreen === 'raise') updateStaminaUI();
+  }, 1000);
+}
+
+// ============================================================
+// 縦画面警告
+// ============================================================
+const orientOverlay = $('orientation-overlay');
 function checkOrientation() {
-  const isPortrait = window.innerHeight > window.innerWidth;
+  const isPortrait = window.innerHeight > window.innerWidth && window.innerWidth < 900;
   orientOverlay.classList.toggle('hidden', !isPortrait);
 }
-
-// リサイズ・画面回転で再チェック
 window.addEventListener('resize', checkOrientation);
-if (screen.orientation) {
-  screen.orientation.addEventListener('change', () => setTimeout(checkOrientation, 150));
-} else {
-  window.addEventListener('orientationchange', () => setTimeout(checkOrientation, 150));
-}
+if (screen.orientation) screen.orientation.addEventListener('change', () => setTimeout(checkOrientation, 150));
+else window.addEventListener('orientationchange', () => setTimeout(checkOrientation, 150));
 
-// 初期チェック
-checkOrientation();
+// ============================================================
+// 起動
+// ============================================================
+(function init() {
+  initSelectScreen();
+  bindEvents();
+  checkOrientation();
+
+  const saved = migrateSave(loadGame());
+  if (!saved) {
+    applyAttrTheme(null);
+    showScreen('select');
+    return;
+  }
+  state = saved;
+  applyAttrTheme(state.attr);
+  tickTimers();  // 放置中のスタミナ回復・成長
+  if (state.stage === 'egg') enterHatch();
+  else enterRaise();
+  saveGame();
+})();

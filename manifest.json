@@ -5,8 +5,8 @@
   "start_url": ".",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#070b14",
-  "theme_color": "#7B2FFF",
+  "background_color": "#07080d",
+  "theme_color": "#07080d",
   "lang": "ja",
   "categories": ["games", "entertainment"],
   "icons": [
