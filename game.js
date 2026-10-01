@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const VERSION      = 'v3.1.0';
+const VERSION      = 'v3.1.1';
 const SAVE_KEY     = 'dragon_cradle_save';
 const BEST_KEY     = SAVE_KEY + '_best';
 const SAVE_VERSION = 3;
@@ -66,14 +66,25 @@ const Stage = (() => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
-    window.addEventListener('resize', resize);
+    // 画面回転では端末によってサイズの確定が遅れるため、落ち着くまで数回計算し直す
+    let timers = [];
+    const scheduleResize = () => {
+      timers.forEach(clearTimeout);
+      resize();
+      requestAnimationFrame(resize);
+      timers = [150, 400, 800].map(ms => setTimeout(resize, ms));
+    };
+    window.addEventListener('resize', scheduleResize);
+    window.addEventListener('orientationchange', scheduleResize);
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', scheduleResize);
     requestAnimationFrame(loop);
     return renderer;
   }
 
   function resize() {
     if (!renderer) return;
-    const W = window.innerWidth, H = window.innerHeight;
+    // キャンバス自身の表示サイズを使う（回転直後の innerWidth/innerHeight の遅延に影響されにくい）
+    const W = canvas.clientWidth || window.innerWidth, H = canvas.clientHeight || window.innerHeight;
     if (!W || !H) return;
     renderer.setSize(W, H, false);
     if (current) {
@@ -340,11 +351,12 @@ function createRaiseScene(attr, stage, type) {
     scene, camera,
     onResize(W, H) {
       // プロフィールカードとドックを避けてドラゴンを中央に
+      // 要素自身の大きさから求める（ウィンドウ高さとの組み合わせがずれても破綻しない）
       const card = document.querySelector('.profile');
       const dock = document.querySelector('#screen-raise .dock');
-      const cardW = card ? card.getBoundingClientRect().right : 0;
-      const dockH = dock ? H - dock.getBoundingClientRect().top : 0;
-      camera.setViewOffset(W, H, -cardW * 0.5, dockH * 0.45, W, H);
+      const cardW = card ? card.offsetLeft + card.offsetWidth : 0;
+      const dockH = dock ? dock.offsetHeight + (parseFloat(getComputedStyle(dock).bottom) || 0) : 0;
+      camera.setViewOffset(W, H, -clamp(cardW, 0, W * 0.4) * 0.5, clamp(dockH, 0, H * 0.4) * 0.45, W, H);
     },
     react(mult) {
       hop = 1;
@@ -447,7 +459,7 @@ function createBattleScene(p, e) {
     onResize(W, H) {
       // 上部HUDと下部コマンドの間に収まるよう、やや下へずらす
       const hud = document.querySelector('.battle-hud');
-      const top = hud ? hud.getBoundingClientRect().bottom : H * 0.3;
+      const top = clamp(hud ? hud.offsetTop + hud.offsetHeight : H * 0.3, 0, H * 0.45);
       camera.setViewOffset(W, H, 0, -(top - H * 0.18) * 0.5, W, H);
     },
     lunge(who) {
