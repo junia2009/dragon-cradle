@@ -18,85 +18,16 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
 #pv-controls button:hover { background: #444; }
 #pv-controls button.active { background: #666; border-color: #aaa; }
 #pv-controls label { font-size: 13px; color: #aaa; }
+#pv-music {
+  position: fixed; bottom: 10px; left: 10px; z-index: 100;
+  display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
+  font-size: 13px; color: #aaa;
+}
+#pv-music button { padding: 4px 10px; border: 1px solid #555; border-radius: 4px; background: #222; color: #fff; cursor: pointer; }
 .pv-spacer { display: inline-block; width: 20px; }
-#game-stubs, #game-stubs * { display: none !important; }
 </style>
 </head>
 <body>
-
-<!-- ====== game.js が参照するダミーDOM要素 ====== -->
-<div id="game-stubs">
-  <div id="screen-select" class="screen"></div>
-  <div id="screen-hatch" class="screen"></div>
-  <div id="screen-raise" class="screen"></div>
-  <div id="screen-battle" class="screen"></div>
-  <div id="screen-record" class="screen"></div>
-  <div id="main-nav" class="hidden"></div>
-  <div id="orientation-overlay" class="hidden"></div>
-  <!-- 属性選択カード -->
-  <button class="attr-card" data-attr="fire"></button>
-  <button class="attr-card" data-attr="ice"></button>
-  <button class="attr-card" data-attr="thunder"></button>
-  <button class="attr-card" data-attr="dark"></button>
-  <!-- キャンバス -->
-  <canvas id="hatch-canvas" width="1" height="1"></canvas>
-  <canvas id="raise-canvas" width="1" height="1"></canvas>
-  <canvas id="battle-canvas" width="1" height="1"></canvas>
-  <!-- 孵化UI -->
-  <div id="hatch-attr-label"></div>
-  <div id="hatch-tap-result"></div>
-  <div id="hatch-gauge-fill"></div>
-  <div id="hatch-gauge-text"></div>
-  <div id="hatch-timing-bar"></div>
-  <!-- 育成UI -->
-  <div id="raise-attr-label"></div>
-  <div id="raise-stage-label"></div>
-  <div id="raise-gauge-fill"></div>
-  <div id="raise-stage-progress"></div>
-  <div id="stamina-dots"></div>
-  <div id="sta-recover-time"></div>
-  <div id="dragon-type-label"></div>
-  <div id="action-feedback"></div>
-  <div id="stat-hp-bar"></div><div id="stat-hp-val"></div>
-  <div id="stat-atk-bar"></div><div id="stat-atk-val"></div>
-  <div id="stat-def-bar"></div><div id="stat-def-val"></div>
-  <div id="stat-spd-bar"></div><div id="stat-spd-val"></div>
-  <button id="btn-feed"></button>
-  <button id="btn-train-atk"></button>
-  <button id="btn-train-def"></button>
-  <button id="btn-train-spd"></button>
-  <button id="btn-go-battle"></button>
-  <!-- バトルUI -->
-  <div id="battle-result" class="hidden"></div>
-  <div id="battle-result-title"></div>
-  <div id="battle-result-score"></div>
-  <div id="battle-commands" class="hidden"></div>
-  <div id="enemy-intent"></div>
-  <button id="cmd-attack"></button>
-  <button id="cmd-special"></button>
-  <button id="cmd-guard"></button>
-  <div id="mp-cost-label"></div>
-  <div id="battle-player-name"></div>
-  <div id="battle-enemy-name"></div>
-  <div id="battle-player-hp-bar"></div>
-  <div id="battle-enemy-hp-bar"></div>
-  <div id="battle-player-hp-text"></div>
-  <div id="battle-enemy-hp-text"></div>
-  <div id="mp-bar"></div>
-  <div id="mp-text"></div>
-  <div id="battle-log"></div>
-  <button id="btn-next-battle"></button>
-  <button id="btn-back-raise"></button>
-  <!-- ナビ・レコード -->
-  <button id="nav-raise" class="nav-btn" data-screen="raise"></button>
-  <button id="nav-battle" class="nav-btn" data-screen="battle"></button>
-  <button id="nav-record" class="nav-btn" data-screen="record"></button>
-  <button id="btn-back-from-record"></button>
-  <!-- レコード表示 -->
-  <div id="rec-best-score"></div>
-  <div id="rec-best-streak"></div>
-  <div id="rec-total-win"></div>
-</div>
 
 <!-- ====== プレビュー用UI ====== -->
 <div id="pv-controls">
@@ -131,29 +62,26 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   <button data-pv-bgm="title">タイトル</button>
   <button data-pv-bgm="raise">育成</button>
   <button data-pv-bgm="battle">戦闘</button>
+  <button data-pv-bgm="hatch">孵化</button>
+</div>
+<div id="pv-music">
+  <label>盛り上がり <input type="range" id="pv-intensity" min="0" max="1" step="0.05" value="0.3"></label>
+  <label>危険 <input type="range" id="pv-danger" min="0" max="1" step="0.05" value="0"></label>
+  <label>緊張 <input type="range" id="pv-tension" min="0" max="1" step="0.05" value="0"></label>
+  <label><input type="checkbox" id="pv-climax"> クライマックス</label>
+  <label><input type="checkbox" id="pv-boss"> ボス</label>
+  <button data-pv-stinger="victory">勝利</button>
+  <button data-pv-stinger="defeat">敗北</button>
+  <button data-pv-stinger="levelup">Lv UP</button>
+  <button data-pv-stinger="evolve">進化</button>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-<!-- localStorage をスタブ化（セーブ読み込み無効化） -->
-<script>
-(function() {
-  const _getItem = localStorage.getItem.bind(localStorage);
-  Storage.prototype.getItem = function(k) {
-    if (k === 'dragon_cradle_save' || k === 'dragon_cradle_save_best') return null;
-    return _getItem(k);
-  };
-  const _setItem = localStorage.setItem.bind(localStorage);
-  Storage.prototype.setItem = function(k, v) {
-    if (k === 'dragon_cradle_save' || k === 'dragon_cradle_save_best') return;
-    return _setItem(k, v);
-  };
-})();
-</script>
-
-<!-- game.js をそのまま読み込む（ダミーDOMが全IDを吸収） -->
-<script src="game.js"></script>
+<script src="js/balance.js"></script>
+<script src="js/music.js"></script>
+<script src="js/models.js"></script>
 
 <!-- プレビュー本体 -->
 <script>
@@ -207,11 +135,10 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
 
   function loadModel() {
     if (currentModel) { pvScene.remove(currentModel); currentModel = null; }
-    attrEffectParticles = [];
-    state.dragonType = document.getElementById('pv-type-select').value;
+    const pvType = document.getElementById('pv-type-select').value;
     try {
       currentModel = (pvStage === 'adult')
-        ? buildAdultDragon(pvAttr)
+        ? buildAdultDragon(pvAttr, pvType)
         : buildBabyDragon(pvAttr);
       if (wireframeMode) {
         currentModel.traverse(c => { if (c.isMesh && c.material) c.material.wireframe = true; });
@@ -305,26 +232,24 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
     btn.addEventListener('click', () => applyBg(btn.dataset.pvBg));
   });
 
-  // BGM切替
-  let bgmActivated = false;
-  function activateBgm() {
-    if (bgmActivated) return;
-    bgmActivated = true;
-    const ctx = BGM.getCtx();
-    if (ctx && ctx.state === 'suspended') ctx.resume();
-  }
+  // BGM切替（インタラクティブミュージックのパラメータも試せる）
   document.querySelectorAll('[data-pv-bgm]').forEach(btn => {
     btn.addEventListener('click', () => {
-      activateBgm();
+      Music.unlock();
       document.querySelectorAll('[data-pv-bgm]').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       const mode = btn.dataset.pvBgm;
-      BGM.stop();
-      if (mode === 'title') BGM.playTitle();
-      else if (mode === 'raise') BGM.playRaise();
-      else if (mode === 'battle') BGM.playBattle();
+      if (mode === 'stop') Music.stop();
+      else Music.play(mode, { attr: pvAttr, adult: pvStage === 'adult' });
     });
   });
+  const pvSlider = (id, key) => document.getElementById(id).addEventListener('input', e => Music.set({ [key]: Number(e.target.value) }));
+  pvSlider('pv-intensity', 'intensity');
+  pvSlider('pv-danger', 'danger');
+  pvSlider('pv-tension', 'tension');
+  document.getElementById('pv-climax').addEventListener('change', e => Music.set({ climax: e.target.checked }));
+  document.getElementById('pv-boss').addEventListener('change', e => Music.set({ boss: e.target.checked }));
+  document.querySelectorAll('[data-pv-stinger]').forEach(btn => btn.addEventListener('click', () => { Music.unlock(); Music.stinger(btn.dataset.pvStinger); }));
 
   // リサイズ
   window.addEventListener('resize', () => {

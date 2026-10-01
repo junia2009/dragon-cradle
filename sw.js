@@ -4,13 +4,16 @@
    ============================================================ */
 'use strict';
 
-const CACHE_NAME = 'dragon-cradle-v6';
+const CACHE_NAME = 'dragon-cradle-v7';
 
 const PRECACHE_ASSETS = [
   './',
   './index.html',
   './styles.css',
   './game.js',
+  './js/balance.js',
+  './js/music.js',
+  './js/models.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -18,7 +21,8 @@ const PRECACHE_ASSETS = [
   './icons/icon-maskable-512.png',
   './icons/apple-touch-icon.png',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
-  'https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@400;700&display=swap',
+  'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
+  'https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Cinzel:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap',
 ];
 
 // ---- Install: pre-cache all assets ----

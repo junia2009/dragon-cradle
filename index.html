@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
@@ -7,7 +7,7 @@
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#7B2FFF" />
+  <meta name="theme-color" content="#07080d" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -19,238 +19,256 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Cinzel:wght@500;700;900&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
 
-  <!-- ========== 属性選択画面 ========== -->
-  <div id="screen-select" class="screen active">
-    <div class="screen-select-inner">
-      <h1 class="game-title">DRAGON<br><span>CRADLE</span></h1>
-      <p class="game-version">v2.1.2</p>
-      <p class="subtitle">卵の属性を選んでください</p>
-      <div class="attribute-cards">
-        <button class="attr-card" data-attr="fire">
-          <div class="attr-icon">🔥</div>
-          <div class="attr-name">炎</div>
-          <div class="attr-type">アタッカー型</div>
-          <div class="attr-stats">HP:80 / ATK:25 / DEF:10 / SPD:15</div>
-        </button>
-        <button class="attr-card" data-attr="ice">
-          <div class="attr-icon">❄️</div>
-          <div class="attr-name">氷</div>
-          <div class="attr-type">タンク型</div>
-          <div class="attr-stats">HP:100 / ATK:15 / DEF:25 / SPD:10</div>
-        </button>
-        <button class="attr-card" data-attr="thunder">
-          <div class="attr-icon">⚡</div>
-          <div class="attr-name">雷</div>
-          <div class="attr-type">スピード型</div>
-          <div class="attr-stats">HP:70 / ATK:20 / DEF:8 / SPD:22</div>
-        </button>
-        <button class="attr-card" data-attr="dark">
-          <div class="attr-icon">🌑</div>
-          <div class="attr-name">闇</div>
-          <div class="attr-type">バランス型</div>
-          <div class="attr-stats">HP:90 / ATK:20 / DEF:20 / SPD:12</div>
-        </button>
-      </div>
-    </div>
-  </div>
+  <!-- ========== アイコン ========== -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2.5c.8 3.6 5.5 5.2 5.5 10.6a5.5 5.5 0 0 1-11 0c0-2.9 1.6-4.3 2.2-6 .9 1 1.6 2 1.8 3.2.6-2.9.7-5.2 1.5-7.8z"/></symbol>
+      <symbol id="i-snow" viewBox="0 0 24 24"><path d="M12 2.5v19M3.8 7.25l16.4 9.5M3.8 16.75l16.4-9.5M9.3 4.2 12 6.6l2.7-2.4M9.3 19.8 12 17.4l2.7 2.4"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.5 2 4.5 13.8h6.8L10.2 22l9.3-12h-7z"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.6A8.4 8.4 0 1 1 9.4 4a6.7 6.7 0 0 0 10.6 10.6z"/></symbol>
+      <symbol id="i-feed" viewBox="0 0 24 24"><path d="M15.5 3.5a5 5 0 0 1 5 5c0 3.3-3.4 5.6-6.6 5.2l-4.6 4.6a2 2 0 1 1-2.6 2.6 2 2 0 1 1 2.6-2.6l4.6-4.6c-.4-3.2 1.9-6.6 5.2-6.6"/></symbol>
+      <symbol id="i-sword" viewBox="0 0 24 24"><path d="M20.5 3.5 10 14M20.5 3.5h-4.2M20.5 3.5v4.2M6.8 11.6l5.6 5.6M8.6 15.4 4 20"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.8 19.5 6v5.4c0 4.8-3.2 8.2-7.5 9.9-4.3-1.7-7.5-5.1-7.5-9.9V6z"/></symbol>
+      <symbol id="i-wind" viewBox="0 0 24 24"><path d="M3 8.5h10.5a3 3 0 1 0-3-3M3 12.5h15a3 3 0 1 1-3 3M3 16.5h6.5"/></symbol>
+      <symbol id="i-swords" viewBox="0 0 24 24"><path d="M4 4l9.5 9.5M4 4h3.5M4 4v3.5M20 4l-9.5 9.5M20 4h-3.5M20 4v3.5M7 15.5l1.5 1.5M17 15.5 15.5 17M5 19l2.8-2.8M19 19l-2.8-2.8"/></symbol>
+      <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2.5l2 6.2 6.5 2.3-6.5 2.3-2 6.2-2-6.2-6.5-2.3 6.5-2.3zM19 17.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/></symbol>
+      <symbol id="i-auto" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 0 1 13.2-4.9M19.5 12a7.5 7.5 0 0 1-13.2 4.9M18 3v4.3h-4.3M6 21v-4.3h4.3"/></symbol>
+      <symbol id="i-egg" viewBox="0 0 24 24"><path d="M12 2.8c4 0 7 6.2 7 11a7 7 0 0 1-14 0c0-4.8 3-11 7-11z"/></symbol>
+      <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 3.5h8v5.5a4 4 0 0 1-8 0zM8 5.5H4.8a3.2 3.2 0 0 0 3.6 4.1M16 5.5h3.2a3.2 3.2 0 0 1-3.6 4.1M12 13v3.5M8.5 20.5h7M9.5 16.5h5v4h-5z"/></symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9h3.5L12 5v14l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18.3 6.2a8 8 0 0 1 0 11.6"/></symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9h3.5L12 5v14l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5"/></symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+      <symbol id="i-crown" viewBox="0 0 24 24"><path d="M3.5 8l4.2 3.6L12 5l4.3 6.6L20.5 8 19 18H5z"/></symbol>
+    </defs>
+  </svg>
 
-  <!-- ========== 孵化画面 ========== -->
-  <div id="screen-hatch" class="screen">
-    <canvas id="hatch-canvas"></canvas>
-    <div class="hatch-ui">
-      <div class="hatch-top">
-        <h2 id="hatch-attr-label" class="attr-label"></h2>
-      </div>
-      <div class="hatch-center-hint" id="hatch-tap-hint">タイミングよくタップ！</div>
-      <div id="hatch-timing-bar-wrap" class="hatch-timing-bar-wrap">
-        <div id="hatch-timing-bar" class="hatch-timing-bar"></div>
-        <div id="hatch-timing-zone" class="hatch-timing-zone"></div>
-      </div>
-      <div id="hatch-tap-result" class="hatch-tap-result"></div>
-      <div class="hatch-bottom">
-        <div class="gauge-wrap">
-          <div class="gauge-label">孵化ゲージ</div>
-          <div class="gauge-bar">
-            <div id="hatch-gauge-fill" class="gauge-fill"></div>
-          </div>
-          <div id="hatch-gauge-text" class="gauge-text">0 / 100</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- ========== 3D ステージ（全画面共有） ========== -->
+  <canvas id="stage"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
 
-  <!-- ========== 育成画面 ========== -->
-  <div id="screen-raise" class="screen">
-    <canvas id="raise-canvas"></canvas>
-
-    <!-- フローティング：アクションフィードバック -->
-    <div id="action-feedback" class="action-feedback"></div>
-
-    <!-- 左サイドバー：情報パネル -->
-    <div class="raise-sidebar">
-      <div class="raise-info-header">
-        <h2 id="raise-attr-label" class="attr-label"></h2>
-        <div id="raise-stage-label" class="stage-label"></div>
-      </div>
-
-      <div class="stats-panel">
-        <div class="stat-row">
-          <span class="stat-name">HP</span>
-          <div class="stat-bar-wrap"><div id="stat-hp-bar" class="stat-bar"></div></div>
-          <span id="stat-hp-val" class="stat-val">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">ATK</span>
-          <div class="stat-bar-wrap"><div id="stat-atk-bar" class="stat-bar"></div></div>
-          <span id="stat-atk-val" class="stat-val">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">DEF</span>
-          <div class="stat-bar-wrap"><div id="stat-def-bar" class="stat-bar"></div></div>
-          <span id="stat-def-val" class="stat-val">0</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-name">SPD</span>
-          <div class="stat-bar-wrap"><div id="stat-spd-bar" class="stat-bar"></div></div>
-          <span id="stat-spd-val" class="stat-val">0</span>
-        </div>
-      </div>
-
-      <div class="sidebar-divider"></div>
-
-      <div class="growth-gauge-wrap">
-        <div class="gauge-label">成長 <span id="raise-stage-progress"></span></div>
-        <div class="gauge-bar">
-          <div id="raise-gauge-fill" class="gauge-fill"></div>
-        </div>
-      </div>
-
-      <div id="dragon-type-label" class="dragon-type-label"></div>
-    </div>
-
-    <!-- 下部アクションバー -->
-    <div class="raise-action-bar">
-      <div class="raise-actions-group">
-        <div class="stamina-wrap">
-          <span class="sta-label">STA</span>
-          <div id="stamina-dots" class="stamina-dots"></div>
-          <span id="sta-recover-time" class="sta-recover-time"></span>
-        </div>
-        <div class="action-buttons">
-          <button class="action-btn raise-act" id="btn-feed">🍖 えさ</button>
-          <button class="action-btn raise-act" id="btn-train-atk">⚔️ 攻撃鍛錬</button>
-          <button class="action-btn raise-act" id="btn-train-def">🛡️ 守り鍛錬</button>
-          <button class="action-btn raise-act" id="btn-train-spd">🏃 速さ鍛錬</button>
-        </div>
-      </div>
-      <button class="battle-btn" id="btn-go-battle">⚔️ 出撃</button>
-    </div>
-
-    <span class="raise-version">v2.1.2</span>
-  </div>
-
-  <!-- ========== バトル画面 ========== -->
-  <div id="screen-battle" class="screen">
-    <canvas id="battle-canvas"></canvas>
-    <div class="battle-ui">
-      <div class="battle-top">
-        <div class="fighter-info fighter-player">
-          <div id="battle-player-name" class="fighter-name"></div>
-          <div class="hp-bar-wrap">
-            <div id="battle-player-hp-bar" class="hp-bar player-hp"></div>
-          </div>
-          <div id="battle-player-hp-text" class="hp-text"></div>
-        </div>
-        <div class="vs-label">VS</div>
-        <div class="fighter-info fighter-enemy">
-          <div id="battle-enemy-name" class="fighter-name"></div>
-          <div class="hp-bar-wrap">
-            <div id="battle-enemy-hp-bar" class="hp-bar enemy-hp"></div>
-          </div>
-          <div id="battle-enemy-hp-text" class="hp-text"></div>
-        </div>
-      </div>
-      <div id="battle-log" class="battle-log"></div>
-      <!-- コマンド選択UI -->
-      <div id="battle-commands" class="battle-commands hidden">
-        <div id="enemy-intent" class="enemy-intent"></div>
-        <div class="command-buttons">
-          <button class="cmd-btn" id="cmd-attack">⚔️ 攻撃</button>
-          <button class="cmd-btn cmd-special" id="cmd-special">✨ 必殺技<span id="mp-cost-label"></span></button>
-          <button class="cmd-btn cmd-guard" id="cmd-guard">🛡️ 守り</button>
-        </div>
-        <div id="mp-bar-wrap" class="mp-bar-wrap">
-          <span class="mp-label">MP</span>
-          <div class="mp-bar-bg"><div id="mp-bar" class="mp-bar"></div></div>
-          <span id="mp-text" class="mp-text"></span>
-        </div>
-        <button class="cmd-btn cmd-auto" id="cmd-auto">🤖 自動</button>
-      </div>
-      <div id="battle-result" class="battle-result hidden">
-        <div id="battle-result-title" class="result-title"></div>
-        <div id="battle-result-score" class="result-score"></div>
-        <div class="result-buttons">
-          <button id="btn-next-battle" class="action-btn">次の敵へ ▶</button>
-          <button id="btn-back-raise" class="action-btn secondary">育成に戻る</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== 記録画面 ========== -->
-  <div id="screen-record" class="screen">
-    <div class="record-inner">
-      <h2 class="section-title">🏆 記録</h2>
-      <div class="record-cards">
-        <div class="record-card">
-          <div class="record-label">最高スコア</div>
-          <div id="rec-best-score" class="record-value">0</div>
-        </div>
-        <div class="record-card">
-          <div class="record-label">最高連勝数</div>
-          <div id="rec-best-streak" class="record-value">0</div>
-        </div>
-        <div class="record-card">
-          <div class="record-label">総討伐数</div>
-          <div id="rec-total-win" class="record-value">0</div>
-        </div>
-      </div>
-      <button class="action-btn" id="btn-back-from-record">← 戻る</button>
-    </div>
-  </div>
-
-  <!-- ========== BGMミュートボタン ========== -->
-  <button id="bgm-toggle" class="bgm-toggle" title="BGM ON/OFF">🔊</button>
-
-  <!-- ========== ナビゲーション ========== -->
-  <nav id="main-nav" class="main-nav hidden">
-    <button class="nav-btn" data-screen="raise" id="nav-raise">🐉 育成</button>
-    <button class="nav-btn" data-screen="battle" id="nav-battle">⚔️ バトル</button>
-    <button class="nav-btn" data-screen="record" id="nav-record">🏆 記録</button>
+  <!-- ========== 上部ナビ ========== -->
+  <nav id="main-nav" class="main-nav hidden" aria-label="メインメニュー">
+    <button class="nav-btn" data-screen="raise" id="nav-raise"><svg><use href="#i-egg"/></svg><span>育成</span></button>
+    <button class="nav-btn" data-screen="battle" id="nav-battle"><svg><use href="#i-swords"/></svg><span>バトル</span></button>
+    <button class="nav-btn" data-screen="record" id="nav-record"><svg><use href="#i-trophy"/></svg><span>記録</span></button>
   </nav>
+  <button id="bgm-toggle" class="icon-btn sound-btn" title="サウンド ON/OFF" aria-label="サウンド切替"><svg><use href="#i-sound"/></svg></button>
 
-  <!-- ========== 縦画面警告オーバーレイ ========== -->
+  <!-- ========== 属性選択（タイトル） ========== -->
+  <section id="screen-select" class="screen active">
+    <div class="title-block">
+      <p class="eyebrow">A Dragon Raising Chronicle</p>
+      <h1 class="logo">Dragon <span>Cradle</span></h1>
+      <p class="tagline">ひとつの卵を選び、竜を育てよう</p>
+    </div>
+    <div class="attr-grid">
+      <button class="attr-card" data-attr="fire" style="--c: var(--fire)">
+        <span class="sigil"><svg><use href="#i-flame"/></svg></span>
+        <span class="attr-name">炎</span>
+        <span class="attr-role">アタッカー</span>
+        <span class="mini-stats" data-mini-stats></span>
+        <span class="attr-desc">高い攻撃力で押し切る</span>
+      </button>
+      <button class="attr-card" data-attr="ice" style="--c: var(--ice)">
+        <span class="sigil"><svg><use href="#i-snow"/></svg></span>
+        <span class="attr-name">氷</span>
+        <span class="attr-role">タンク</span>
+        <span class="mini-stats" data-mini-stats></span>
+        <span class="attr-desc">厚い体力と守りで耐える</span>
+      </button>
+      <button class="attr-card" data-attr="thunder" style="--c: var(--thunder)">
+        <span class="sigil"><svg><use href="#i-bolt"/></svg></span>
+        <span class="attr-name">雷</span>
+        <span class="attr-role">スピード</span>
+        <span class="mini-stats" data-mini-stats></span>
+        <span class="attr-desc">先手・回避・会心で翻弄</span>
+      </button>
+      <button class="attr-card" data-attr="dark" style="--c: var(--dark)">
+        <span class="sigil"><svg><use href="#i-moon"/></svg></span>
+        <span class="attr-name">闇</span>
+        <span class="attr-role">バランス</span>
+        <span class="mini-stats" data-mini-stats></span>
+        <span class="attr-desc">相性の不利を受けない</span>
+      </button>
+    </div>
+    <p class="legend">相性　炎 › 氷 › 雷 › 炎　（闇はすべて等倍）</p>
+    <p class="version" data-version></p>
+  </section>
+
+  <!-- ========== 孵化 ========== -->
+  <section id="screen-hatch" class="screen">
+    <header class="screen-head">
+      <p class="eyebrow">Hatching</p>
+      <h2 id="hatch-attr-label" class="screen-title"></h2>
+    </header>
+    <div id="hatch-tap-result" class="tap-result"></div>
+    <div class="hatch-panel">
+      <div class="timing">
+        <div class="timing-track">
+          <div class="zone zone-great"></div>
+          <div class="zone zone-perfect"></div>
+          <div id="hatch-timing-bar" class="timing-marker"></div>
+        </div>
+        <p class="hint">揺れがいちばん大きくなった瞬間にタップ</p>
+      </div>
+      <div class="meter">
+        <div class="meter-head"><span>孵化</span><span id="hatch-gauge-text">0%</span></div>
+        <div class="bar"><div id="hatch-gauge-fill" class="bar-fill"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 育成 ========== -->
+  <section id="screen-raise" class="screen">
+    <aside class="card profile">
+      <div class="profile-head">
+        <span class="sigil sm" id="raise-sigil"></span>
+        <div class="profile-name">
+          <h2 id="raise-attr-label"></h2>
+          <p id="raise-stage-label" class="muted"></p>
+        </div>
+        <div class="lv-badge"><span>Lv</span><strong id="raise-level">1</strong></div>
+      </div>
+
+      <div class="meter compact">
+        <div class="meter-head"><span>EXP</span><span id="raise-exp-text"></span></div>
+        <div class="bar thin"><div id="raise-exp-fill" class="bar-fill gold"></div></div>
+      </div>
+      <div class="meter compact" id="growth-wrap">
+        <div class="meter-head"><span>成長</span><span id="raise-stage-progress"></span></div>
+        <div class="bar thin"><div id="raise-gauge-fill" class="bar-fill"></div></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat-row" data-stat="hp"><span class="stat-name">HP</span><div class="stat-bar-wrap"><div id="stat-hp-bar" class="stat-bar"></div></div><span id="stat-hp-val" class="stat-val">0</span></div>
+        <div class="stat-row" data-stat="atk"><span class="stat-name">ATK</span><div class="stat-bar-wrap"><div id="stat-atk-bar" class="stat-bar"></div></div><span id="stat-atk-val" class="stat-val">0</span></div>
+        <div class="stat-row" data-stat="def"><span class="stat-name">DEF</span><div class="stat-bar-wrap"><div id="stat-def-bar" class="stat-bar"></div></div><span id="stat-def-val" class="stat-val">0</span></div>
+        <div class="stat-row" data-stat="spd"><span class="stat-name">SPD</span><div class="stat-bar-wrap"><div id="stat-spd-bar" class="stat-bar"></div></div><span id="stat-spd-val" class="stat-val">0</span></div>
+      </div>
+
+      <div class="type-chip">
+        <span id="dragon-type-label" class="type-name"></span>
+        <span id="dragon-special-label" class="type-special"></span>
+      </div>
+    </aside>
+
+    <div class="dock">
+      <div class="stamina">
+        <span class="dock-label">Stamina</span>
+        <div id="stamina-dots" class="pips"></div>
+        <span id="sta-recover-time" class="sta-time"></span>
+      </div>
+      <div class="train-buttons">
+        <button class="train-btn" id="btn-feed"><svg><use href="#i-feed"/></svg><span class="t">えさ</span><span class="s" data-gain="feed">HP</span></button>
+        <button class="train-btn" id="btn-train-atk"><svg><use href="#i-sword"/></svg><span class="t">攻撃鍛錬</span><span class="s" data-gain="train-atk">ATK</span></button>
+        <button class="train-btn" id="btn-train-def"><svg><use href="#i-shield"/></svg><span class="t">守り鍛錬</span><span class="s" data-gain="train-def">DEF</span></button>
+        <button class="train-btn" id="btn-train-spd"><svg><use href="#i-wind"/></svg><span class="t">速さ鍛錬</span><span class="s" data-gain="train-spd">SPD</span></button>
+      </div>
+      <button class="primary-btn sortie" id="btn-go-battle">
+        <svg><use href="#i-swords"/></svg>
+        <span class="t">出撃</span>
+        <span class="s" id="next-enemy-label"></span>
+      </button>
+    </div>
+    <div id="action-feedback" class="toast" role="status"></div>
+  </section>
+
+  <!-- ========== バトル ========== -->
+  <section id="screen-battle" class="screen">
+    <div class="battle-hud">
+      <div class="plate plate-player">
+        <div class="plate-head">
+          <span class="sigil xs" id="bp-sigil"></span>
+          <span id="battle-player-name" class="plate-name"></span>
+          <span id="battle-player-lv" class="plate-lv"></span>
+        </div>
+        <div class="hp"><div id="battle-player-hp-ghost" class="hp-ghost"></div><div id="battle-player-hp-bar" class="hp-fill player"></div></div>
+        <div class="plate-foot">
+          <span id="battle-player-hp-text" class="hp-text"></span>
+          <span class="mp"><span class="mp-label">MP</span><span id="mp-pips" class="mp-pips"></span></span>
+        </div>
+      </div>
+
+      <div class="turn-badge"><span>Turn</span><strong id="battle-turn">1</strong></div>
+
+      <div class="plate plate-enemy">
+        <div class="plate-head">
+          <span id="battle-enemy-lv" class="plate-lv"></span>
+          <span id="battle-enemy-name" class="plate-name"></span>
+          <span class="sigil xs" id="be-sigil"></span>
+        </div>
+        <div class="hp"><div id="battle-enemy-hp-ghost" class="hp-ghost"></div><div id="battle-enemy-hp-bar" class="hp-fill enemy"></div></div>
+        <div class="plate-foot">
+          <span id="enemy-intent" class="intent"></span>
+          <span id="battle-enemy-hp-text" class="hp-text"></span>
+        </div>
+      </div>
+    </div>
+
+    <button class="auto-toggle" id="cmd-auto" aria-pressed="false"><svg><use href="#i-auto"/></svg><span>AUTO</span></button>
+
+    <div id="battle-banner" class="banner"></div>
+    <div id="battle-log" class="battle-log" aria-live="polite"></div>
+    <div id="damage-layer" class="damage-layer"></div>
+
+    <div id="battle-commands" class="command-dock hidden">
+      <button class="cmd" id="cmd-attack"><svg><use href="#i-sword"/></svg><span class="t">攻撃</span><span class="s">MP +1</span></button>
+      <button class="cmd cmd-special" id="cmd-special"><svg><use href="#i-spark"/></svg><span class="t" id="cmd-special-name">必殺技</span><span class="s" id="mp-cost-label">MP 3</span></button>
+      <button class="cmd cmd-guard" id="cmd-guard"><svg><use href="#i-shield"/></svg><span class="t">守り</span><span class="s">被ダメ軽減 / MP +2</span></button>
+    </div>
+
+    <div id="battle-result" class="modal hidden">
+      <div class="modal-card">
+        <p id="battle-result-eyebrow" class="eyebrow"></p>
+        <h2 id="battle-result-title" class="result-title"></h2>
+        <ul id="battle-result-rewards" class="rewards"></ul>
+        <div class="modal-actions">
+          <button id="btn-back-raise" class="ghost-btn"><svg><use href="#i-back"/></svg>育成に戻る</button>
+          <button id="btn-next-battle" class="primary-btn"><span class="t">次の敵へ</span><svg><use href="#i-arrow"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 記録 ========== -->
+  <section id="screen-record" class="screen">
+    <div class="card record-card">
+      <p class="eyebrow">Chronicle</p>
+      <h2 class="screen-title">記録</h2>
+      <div class="record-grid">
+        <div class="rec"><span class="rec-label">最高スコア</span><span id="rec-best-score" class="rec-val">0</span></div>
+        <div class="rec"><span class="rec-label">最高連勝</span><span id="rec-best-streak" class="rec-val">0</span></div>
+        <div class="rec"><span class="rec-label">総討伐数</span><span id="rec-total-win" class="rec-val">0</span></div>
+        <div class="rec"><span class="rec-label">最高到達</span><span id="rec-best-level" class="rec-val">0</span></div>
+      </div>
+      <p id="rec-current" class="rec-current"></p>
+      <div class="record-actions">
+        <button class="ghost-btn" id="btn-back-from-record"><svg><use href="#i-back"/></svg>戻る</button>
+        <button class="danger-btn" id="btn-reset">新しい卵から始める</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== 縦画面警告 ========== -->
   <div id="orientation-overlay" class="hidden">
     <div class="orient-content">
-      <div class="orient-anim">
-        <div class="orient-phone">
-          <span class="orient-dragon">🐉</span>
-        </div>
-        <span class="orient-rotate-hint">↻</span>
-      </div>
-      <p class="orient-msg">横画面にしてね！</p>
-      <p class="orient-sub">ROTATE DEVICE TO LANDSCAPE</p>
-      <p class="orient-version">v2.1.2</p>
+      <div class="orient-phone"><svg><use href="#i-egg"/></svg></div>
+      <p class="orient-msg">横画面にしてください</p>
+      <p class="orient-sub">Rotate your device</p>
     </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="js/balance.js"></script>
+  <script src="js/music.js"></script>
+  <script src="js/models.js"></script>
   <script src="game.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
