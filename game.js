@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const VERSION      = 'v3.0.1';
+const VERSION      = 'v3.1.0';
 const SAVE_KEY     = 'dragon_cradle_save';
 const BEST_KEY     = SAVE_KEY + '_best';
 const SAVE_VERSION = 3;
@@ -57,7 +57,26 @@ const Stage = (() => {
   const canvas = $('stage');
   let renderer = null;
   let current = null;
+  let envTex = null;
   let last = performance.now();
+
+  // 反射用の環境マップ（スタジオ照明風）。全シーンで共有
+  function buildEnv() {
+    const env = new THREE.Scene();
+    env.add(buildSkyDome('#3a4466', '#1a1d2c', '#0a0a10'));
+    const box = (w, h, pos, c, i) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(i), side: THREE.DoubleSide }));
+      m.position.copy(pos);
+      m.lookAt(0, 0, 0);
+      env.add(m);
+    };
+    box(30, 14, new THREE.Vector3(20, 40, 30), '#fff2e0', 3);
+    box(20, 30, new THREE.Vector3(-45, 10, -10), '#9fb4ff', 1.6);
+    box(40, 6, new THREE.Vector3(0, 6, -50), '#ffffff', 1.2);
+    const pm = new THREE.PMREMGenerator(renderer);
+    envTex = pm.fromScene(env, 0.04).texture;
+    pm.dispose();
+  }
 
   function ensure() {
     if (renderer) return renderer;
@@ -66,6 +85,7 @@ const Stage = (() => {
     renderer.setSize(window.innerWidth, window.innerHeight, false);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
+    buildEnv();
     window.addEventListener('resize', resize);
     requestAnimationFrame(loop);
     return renderer;
@@ -97,10 +117,11 @@ const Stage = (() => {
     if (s.dispose) s.dispose();
     const shared = glowTexture();
     s.scene.traverse(o => {
+      if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose();
       if (o.geometry) o.geometry.dispose();
       const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
       mats.forEach(m => {
-        ['map', 'emissiveMap'].forEach(k => { if (m[k] && m[k] !== shared) m[k].dispose(); });
+        ['map', 'emissiveMap'].forEach(k => { if (m[k] && m[k] !== shared && !m[k].__shared) m[k].dispose(); });
         m.dispose();
       });
     });
@@ -120,7 +141,7 @@ const Stage = (() => {
     document.body.classList.remove('has-stage');
   }
 
-  return { set, clear, get current() { return current; }, get canvas() { return canvas; } };
+  return { set, clear, get current() { return current; }, get canvas() { return canvas; }, get env() { ensure(); return envTex; } };
 })();
 
 // 共通ライティング
@@ -281,6 +302,7 @@ function createRaiseScene(attr, stage, type) {
   const col = ATTR[attr].color;
   const bgHex = hexCss(ATTR[attr].raiseBg);
   const scene = new THREE.Scene();
+  scene.environment = Stage.env;
   scene.fog = new THREE.Fog(ATTR[attr].raiseBg, 14, 42);
   scene.add(buildSkyDome(mixHex(bgHex, '#000000', 0.55), mixHex(bgHex, '#11131f', 0.3), '#050608'));
 
@@ -348,6 +370,7 @@ function createRaiseScene(attr, stage, type) {
     },
     react(mult) {
       hop = 1;
+      playDragonAction(dragon, 'happy');
       fx.burst(new THREE.Vector3(0, 0.6, 0), mult >= 3 ? '#fff1c4' : col, 8 + mult * 8, 2.5 + mult, 0.9, 0.3);
     },
     setDragon(newStage, newType, evolve) {
@@ -358,6 +381,7 @@ function createRaiseScene(attr, stage, type) {
       if (newStage !== stage) { stage = newStage; frame(FRAMING[stage === 'adult' ? 'adult' : 'baby']); }
       if (evolve) {
         flash = 1;
+        playDragonAction(dragon, 'roar');
         fx.burst(new THREE.Vector3(0, 0.8, 0), '#ffffff', 50, 5, 1.4, 0.5);
         fx.burst(new THREE.Vector3(0, 0.8, 0), col, 60, 6, 1.6, 0.5);
       }
@@ -368,7 +392,7 @@ function createRaiseScene(attr, stage, type) {
       dragon.position.y = Math.sin(t * 0.8) * 0.1 + Math.sin(hop * Math.PI) * 0.35;
       flash = Math.max(0, flash - dt * 0.8);
       setDragonFlash(dragon, flash + hop * 0.25);
-      animateDragonParticles(dragon, t);
+      animateDragon(dragon, dt, t);
       animateMotes(motes, t);
       ped.userData.ring.material.opacity = 0.65 + Math.sin(t * 1.5) * 0.2;
       fx.update(dt);
@@ -383,6 +407,7 @@ function createRaiseScene(attr, stage, type) {
 // ---------------- バトルシーン ----------------
 function createBattleScene(p, e) {
   const scene = new THREE.Scene();
+  scene.environment = Stage.env;
   const bg = e.boss ? '#1c0810' : '#140c1c';
   scene.fog = new THREE.Fog(new THREE.Color(bg), 13, 40);
   scene.add(buildSkyDome(e.boss ? '#2a0a12' : '#1a1028', bg, '#050407'));
@@ -413,8 +438,7 @@ function createBattleScene(p, e) {
 
   function makeFighter(info, x, facing, accent) {
     const g = buildDragon(info.attr, info.stage, info.type);
-    if (info.stage === 'adult') g.scale.setScalar(info.boss ? 1.22 : 1.05);
-    else if (info.boss) g.scale.multiplyScalar(1.2);
+    if (info.boss) setDragonScale(g, info.stage === 'adult' ? 1.15 : 1.2);
     g.rotation.y = facing;
     scene.add(g);
     const ped = buildPedestal(accent, 1.45);
@@ -438,7 +462,7 @@ function createBattleScene(p, e) {
   scene.add(shield);
   let shieldTarget = 0, shakeAmt = 0;
 
-  const centerOf = who => F[who].g.position.clone().add(new THREE.Vector3(0, F[who].g.userData.stage === 'adult' ? 1.0 : 0.5, 0));
+  const centerOf = who => F[who].g.position.clone().add(new THREE.Vector3(0, dragonCenterY(F[who].g), 0));
 
   return {
     scene, camera,
@@ -450,11 +474,13 @@ function createBattleScene(p, e) {
     },
     lunge(who) {
       const f = F[who];
+      playDragonAction(f.g, 'attack');
       return tw.add(340, q => { f.lunge = Math.sin(easeOut(q) * Math.PI) * 1.3; });
     },
     hit(who, strong) {
       const f = F[who];
       f.flash = 1;
+      playDragonAction(f.g, 'hit');
       shakeAmt = Math.max(shakeAmt, strong ? 0.28 : 0.1);
       fx.burst(centerOf(who), who === 'enemy' ? '#fff0c0' : '#ffb0b8', strong ? 26 : 12, strong ? 5 : 3.2, 0.6, 0.32);
       return tw.add(320, q => { f.knock = Math.sin(q * Math.PI) * (strong ? 0.5 : 0.28); });
@@ -485,7 +511,8 @@ function createBattleScene(p, e) {
         if (q >= 1) orbs.forEach(s => { scene.remove(s); s.material.dispose(); });
       }).then(() => fx.burst(b, color, 40, 5.5, 0.9, 0.45));
     },
-    charge(who, color) { fx.burst(centerOf(who), color, 20, 1.2, 0.8, 0.35); },
+    charge(who, color) { fx.burst(centerOf(who), color, 20, 1.2, 0.8, 0.35); playDragonAction(F[who].g, 'roar'); },
+    cheer(who) { playDragonAction(F[who].g, 'roar'); },
     defeat(who) {
       const f = F[who];
       return tw.add(1100, q => { f.sink = easeOut(q); });
@@ -507,7 +534,7 @@ function createBattleScene(p, e) {
         );
         f.g.rotation.z = f.sink * f.dir * -0.6;
         setDragonFlash(f.g, f.flash);
-        animateDragonParticles(f.g, t);
+        animateDragon(f.g, dt, t);
         f.ped.userData.ring.material.opacity = 0.6 + Math.sin(t * 2 + f.phase) * 0.25;
       });
       shield.material.opacity += (shieldTarget - shield.material.opacity) * Math.min(1, dt * 10);
@@ -1020,6 +1047,7 @@ function finishBattle(win, id) {
   const wasAuto = state.autoMode;
   Music.set({ danger: 0, tension: 0 });
   battleScene.defeat(win ? 'enemy' : 'player');
+  setTimeout(() => { if (id === battleId && battleScene) battleScene.cheer(win ? 'player' : 'enemy'); }, 500);
   Music.stinger(win ? 'victory' : 'defeat');
 
   const rewards = [];

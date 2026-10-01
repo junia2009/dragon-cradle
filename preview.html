@@ -49,6 +49,11 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
     <option value="speedster">スピード</option>
   </select>
   <span class="pv-spacer"></span>
+  <button data-pv-action="attack">攻撃</button>
+  <button data-pv-action="hit">被弾</button>
+  <button data-pv-action="happy">喜び</button>
+  <button data-pv-action="roar">咆哮</button>
+  <span class="pv-spacer"></span>
   <button id="pv-btn-wireframe">ワイヤーフレーム</button>
   <button id="pv-btn-reset-cam">カメラリセット</button>
   <span class="pv-spacer"></span>
@@ -82,6 +87,7 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
 <script src="js/balance.js"></script>
 <script src="js/music.js"></script>
 <script src="js/models.js"></script>
+<script src="js/creatures.js"></script>
 
 <!-- プレビュー本体 -->
 <script>
@@ -89,10 +95,22 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   const pvRenderer = new THREE.WebGLRenderer({ antialias: true });
   pvRenderer.setSize(window.innerWidth, window.innerHeight);
   pvRenderer.setPixelRatio(window.devicePixelRatio);
-  pvRenderer.outputEncoding = THREE.sRGBEncoding;
+  // ゲーム本編と同じ見え方（ACES トーンマッピング＋環境反射）
+  pvRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  pvRenderer.toneMappingExposure = 1.15;
   document.body.appendChild(pvRenderer.domElement);
 
   const pvScene = new THREE.Scene();
+  (function () {
+    const env = new THREE.Scene();
+    env.add(buildSkyDome('#3a4466', '#1a1d2c', '#0a0a10'));
+    const light = new THREE.Mesh(new THREE.PlaneGeometry(30, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff2e0').multiplyScalar(3), side: THREE.DoubleSide }));
+    light.position.set(20, 40, 30);
+    light.lookAt(0, 0, 0);
+    env.add(light);
+    const pm = new THREE.PMREMGenerator(pvRenderer);
+    pvScene.environment = pm.fromScene(env, 0.04).texture;
+  })();
   pvScene.background = new THREE.Color(0x1a1a2e);
 
   const pvCamera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 200);
@@ -174,6 +192,11 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
 
   // タイプ選択
   document.getElementById('pv-type-select').addEventListener('change', () => loadModel());
+
+  // アクション再生
+  document.querySelectorAll('[data-pv-action]').forEach(btn => {
+    btn.addEventListener('click', () => { if (currentModel) playDragonAction(currentModel, btn.dataset.pvAction); });
+  });
 
   // ワイヤーフレーム
   document.getElementById('pv-btn-wireframe').addEventListener('click', function() {
@@ -259,8 +282,12 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   });
 
   // アニメーションループ
-  (function animate() {
+  let pvLast = performance.now();
+  (function animate(now = performance.now()) {
     requestAnimationFrame(animate);
+    const dt = Math.min(0.05, (now - pvLast) / 1000);
+    pvLast = now;
+    if (currentModel) animateDragon(currentModel, dt, now / 1000);
     pvControls.update();
     pvRenderer.render(pvScene, pvCamera);
   })();
