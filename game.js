@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const VERSION      = 'v3.1.1';
+const VERSION      = 'v3.2.0';
 const SAVE_KEY     = 'dragon_cradle_save';
 const BEST_KEY     = SAVE_KEY + '_best';
 const SAVE_VERSION = 3;
@@ -709,6 +709,11 @@ function enterRaise() {
   setSigil($('raise-sigil'), state.attr);
   showScreen('raise');
   updateRaiseUI();
+  if (pendingStatBump) {
+    const stats = pendingStatBump;
+    pendingStatBump = null;
+    stats.forEach((k, i) => setTimeout(() => bumpStat(k), 400 + i * 120));
+  }
 }
 
 const TRAIN_BUTTONS = { 'btn-feed': 'feed', 'btn-train-atk': 'train-atk', 'btn-train-def': 'train-def', 'btn-train-spd': 'train-spd' };
@@ -1042,6 +1047,8 @@ function finishBattle(win, id) {
 
   const rewards = [];
   const prevLevel = state.level;
+  const prevStage = state.stage;
+  const statsBefore = playerStats();
   let gainedExp;
   if (win) {
     state.streak++;
@@ -1065,16 +1072,21 @@ function finishBattle(win, id) {
   }
   gainExp(gainedExp);
   if (win) addGrowth(4);
-  if (state.level > prevLevel) rewards.push(['レベル', `${prevLevel} → ${state.level}`, true]);
   if (!win) rewards.push(['note', '鍛錬で能力を上げてから再挑戦しよう']);
+  // レベルアップ・進化で上がった能力
+  const evolved = prevStage !== 'adult' && state.stage === 'adult';
+  const growth = (state.level > prevLevel || evolved)
+    ? { before: statsBefore, after: playerStats(), prevLevel, level: state.level, evolved }
+    : null;
+  if (growth) pendingStatBump = Object.keys(STAT_LABEL).filter(k => growth.after[k] > growth.before[k]);
 
   updateRecord();
   saveGame();
 
   setTimeout(() => {
     if (id !== battleId) return;
-    showBattleResult(win, boss, rewards, wasAuto && win);
-    if (state.level > prevLevel) setTimeout(() => Music.stinger('levelup'), 600);
+    showBattleResult(win, boss, rewards, wasAuto && win, growth);
+    if (growth) setTimeout(() => Music.stinger('levelup'), 600);
   }, 1300);
 }
 
@@ -1087,7 +1099,38 @@ function gainExp(n) {
   if (state.level >= LEVEL_MAX) state.exp = 0;
 }
 
-function showBattleResult(win, boss, rewards, autoNext) {
+// 結果画面のレベルアップ表示（上がった能力を数字のカウントアップで見せる）
+let pendingStatBump = null;
+function renderLevelUp(growth) {
+  const box = $('battle-levelup');
+  if (!growth) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  const head = growth.evolved && growth.level === growth.prevLevel
+    ? `<span class="lu-badge">EVOLVED</span><span class="lu-lv">成体に進化！</span>`
+    : `<span class="lu-badge">${growth.evolved ? 'LEVEL UP ・ EVOLVED' : 'LEVEL UP'}</span><span class="lu-lv">Lv ${growth.prevLevel}<i>→</i><b>${growth.level}</b></span>`;
+  const cells = Object.keys(STAT_LABEL).map(k => {
+    const d = growth.after[k] - growth.before[k];
+    return `<div class="lu-stat${d > 0 ? ' up' : ''}"><span class="k">${STAT_LABEL[k]}</span>`
+      + `<span class="v" data-from="${growth.before[k]}" data-to="${growth.after[k]}">${growth.before[k]}</span>`
+      + `<span class="d">${d > 0 ? '+' + d : '±0'}</span></div>`;
+  }).join('');
+  box.innerHTML = `<div class="lu-head">${head}</div><div class="lu-stats">${cells}</div>`;
+  box.classList.remove('hidden');
+  // 少し待ってから数字をカウントアップ
+  const els = [...box.querySelectorAll('.v')];
+  const t0 = performance.now() + 450, dur = 700;
+  const step = now => {
+    const p = Math.min(1, Math.max(0, (now - t0) / dur));
+    const e = 1 - Math.pow(1 - p, 3);
+    els.forEach(el => {
+      const a = +el.dataset.from, b = +el.dataset.to;
+      el.textContent = Math.round(a + (b - a) * e);
+    });
+    if (p < 1 && box.isConnected) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function showBattleResult(win, boss, rewards, autoNext, growth) {
   const titleEl = $('battle-result-title');
   $('battle-result-eyebrow').textContent = win ? (boss ? 'Boss Defeated' : 'Battle Won') : 'Battle Lost';
   titleEl.textContent = win ? 'Victory' : 'Defeat';
@@ -1097,6 +1140,7 @@ function showBattleResult(win, boss, rewards, autoNext) {
       ? `<li class="note" style="animation-delay:${i * 70}ms">${v}</li>`
       : `<li class="${hl ? 'hl' : ''}" style="animation-delay:${i * 70}ms"><span>${k}</span><span>${v}</span></li>`
   ).join('');
+  renderLevelUp(growth);
   $('btn-next-battle').querySelector('.t').textContent = win ? `次へ Lv.${state.battleLevel}` : '再挑戦';
   $('battle-result').classList.remove('hidden');
 

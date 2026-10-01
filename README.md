@@ -4,7 +4,7 @@
 
 > A dragon breeding and battle game built with Three.js and Web Audio API
 
-![Version](https://img.shields.io/badge/version-v3.1.0-E6C47A)
+![Version](https://img.shields.io/badge/version-v3.2.0-E6C47A)
 
 ## 🎮 遊び方
 
@@ -45,6 +45,7 @@
 - 敵は数ターンごとに **力をためて強攻撃** → 予告を見て守る
 - 5 の倍数 Lv は **ボス戦**（HP 多め・強攻撃が頻繁・HP 半分で激昂）
 - 勝利で経験値・スコア・スタミナ。負けても経験値の 25% は得られる
+- レベルアップすると、結果画面に上がった能力（HP / ATK / DEF / SPD）が表示される
 - 戦闘中に画面を離れると撤退扱い（連勝リセット）
 - AUTO で自動戦闘。キーボードは 1 / 2 / 3 / A
 
