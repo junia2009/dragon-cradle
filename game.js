@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const VERSION      = 'v3.0.1';
+const VERSION      = 'v3.1.0';
 const SAVE_KEY     = 'dragon_cradle_save';
 const BEST_KEY     = SAVE_KEY + '_best';
 const SAVE_VERSION = 3;
@@ -312,7 +312,7 @@ function createRaiseScene(attr, stage, type) {
   scene.add(motes);
   const fx = makeBurster(scene);
 
-  let dragon = buildDragon(attr, stage, type);
+  let dragon = rigDragon(buildDragon(attr, stage, type), attr);
   scene.add(dragon);
 
   controls = new THREE.OrbitControls(camera, Stage.canvas);
@@ -348,16 +348,18 @@ function createRaiseScene(attr, stage, type) {
     },
     react(mult) {
       hop = 1;
+      playDragonAction(dragon, 'happy');
       fx.burst(new THREE.Vector3(0, 0.6, 0), mult >= 3 ? '#fff1c4' : col, 8 + mult * 8, 2.5 + mult, 0.9, 0.3);
     },
     setDragon(newStage, newType, evolve) {
       scene.remove(dragon);
       dragon.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
-      dragon = buildDragon(attr, newStage, newType);
+      dragon = rigDragon(buildDragon(attr, newStage, newType), attr);
       scene.add(dragon);
       if (newStage !== stage) { stage = newStage; frame(FRAMING[stage === 'adult' ? 'adult' : 'baby']); }
       if (evolve) {
         flash = 1;
+        playDragonAction(dragon, 'roar');
         fx.burst(new THREE.Vector3(0, 0.8, 0), '#ffffff', 50, 5, 1.4, 0.5);
         fx.burst(new THREE.Vector3(0, 0.8, 0), col, 60, 6, 1.6, 0.5);
       }
@@ -368,7 +370,7 @@ function createRaiseScene(attr, stage, type) {
       dragon.position.y = Math.sin(t * 0.8) * 0.1 + Math.sin(hop * Math.PI) * 0.35;
       flash = Math.max(0, flash - dt * 0.8);
       setDragonFlash(dragon, flash + hop * 0.25);
-      animateDragonParticles(dragon, t);
+      animateDragon(dragon, dt, t);
       animateMotes(motes, t);
       ped.userData.ring.material.opacity = 0.65 + Math.sin(t * 1.5) * 0.2;
       fx.update(dt);
@@ -412,7 +414,7 @@ function createBattleScene(p, e) {
   const tw = makeTweener();
 
   function makeFighter(info, x, facing, accent) {
-    const g = buildDragon(info.attr, info.stage, info.type);
+    const g = rigDragon(buildDragon(info.attr, info.stage, info.type), info.attr);
     if (info.stage === 'adult') g.scale.setScalar(info.boss ? 1.22 : 1.05);
     else if (info.boss) g.scale.multiplyScalar(1.2);
     g.rotation.y = facing;
@@ -450,11 +452,13 @@ function createBattleScene(p, e) {
     },
     lunge(who) {
       const f = F[who];
+      playDragonAction(f.g, 'attack');
       return tw.add(340, q => { f.lunge = Math.sin(easeOut(q) * Math.PI) * 1.3; });
     },
     hit(who, strong) {
       const f = F[who];
       f.flash = 1;
+      playDragonAction(f.g, 'hit');
       shakeAmt = Math.max(shakeAmt, strong ? 0.28 : 0.1);
       fx.burst(centerOf(who), who === 'enemy' ? '#fff0c0' : '#ffb0b8', strong ? 26 : 12, strong ? 5 : 3.2, 0.6, 0.32);
       return tw.add(320, q => { f.knock = Math.sin(q * Math.PI) * (strong ? 0.5 : 0.28); });
@@ -485,7 +489,8 @@ function createBattleScene(p, e) {
         if (q >= 1) orbs.forEach(s => { scene.remove(s); s.material.dispose(); });
       }).then(() => fx.burst(b, color, 40, 5.5, 0.9, 0.45));
     },
-    charge(who, color) { fx.burst(centerOf(who), color, 20, 1.2, 0.8, 0.35); },
+    charge(who, color) { fx.burst(centerOf(who), color, 20, 1.2, 0.8, 0.35); playDragonAction(F[who].g, 'roar'); },
+    cheer(who) { playDragonAction(F[who].g, 'roar'); },
     defeat(who) {
       const f = F[who];
       return tw.add(1100, q => { f.sink = easeOut(q); });
@@ -507,7 +512,7 @@ function createBattleScene(p, e) {
         );
         f.g.rotation.z = f.sink * f.dir * -0.6;
         setDragonFlash(f.g, f.flash);
-        animateDragonParticles(f.g, t);
+        animateDragon(f.g, dt, t);
         f.ped.userData.ring.material.opacity = 0.6 + Math.sin(t * 2 + f.phase) * 0.25;
       });
       shield.material.opacity += (shieldTarget - shield.material.opacity) * Math.min(1, dt * 10);
@@ -1020,6 +1025,7 @@ function finishBattle(win, id) {
   const wasAuto = state.autoMode;
   Music.set({ danger: 0, tension: 0 });
   battleScene.defeat(win ? 'enemy' : 'player');
+  setTimeout(() => { if (id === battleId && battleScene) battleScene.cheer(win ? 'player' : 'enemy'); }, 500);
   Music.stinger(win ? 'victory' : 'defeat');
 
   const rewards = [];
