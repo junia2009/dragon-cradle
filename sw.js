@@ -4,7 +4,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_NAME = 'dragon-cradle-v10';
+const CACHE_NAME = 'dragon-cradle-v11';
 
 const PRECACHE_ASSETS = [
   './',
