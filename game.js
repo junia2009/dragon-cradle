@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const VERSION      = 'v3.0.0';
+const VERSION      = 'v3.0.1';
 const SAVE_KEY     = 'dragon_cradle_save';
 const BEST_KEY     = SAVE_KEY + '_best';
 const SAVE_VERSION = 3;
@@ -1323,9 +1323,11 @@ function bindEvents() {
   $('bgm-toggle').addEventListener('click', () => { Music.unlock(); Music.toggleMute(); soundIcon(); });
   soundIcon();
 
-  // 最初の操作でオーディオを起動（ブラウザの自動再生制限対策）
-  document.addEventListener('pointerdown', () => Music.unlock(), { once: true });
-  document.addEventListener('keydown', () => Music.unlock(), { once: true });
+  // ユーザー操作でオーディオを起動（ブラウザの自動再生制限対策）。
+  // iOS はタッチの pointerdown では許可されないため、鳴り始めるまで毎回の操作で再試行する
+  ['pointerup', 'touchend', 'click', 'keydown'].forEach(ev => {
+    document.addEventListener(ev, () => { if (!Music.isRunning()) Music.unlock(); }, { capture: true, passive: true });
+  });
 
   // キーボード操作（バトル：1/2/3、A=自動）
   document.addEventListener('keydown', e => {
