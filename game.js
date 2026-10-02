@@ -5,7 +5,7 @@
    ============================================================ */
 'use strict';
 
-const VERSION      = 'v3.2.0';
+const VERSION      = 'v3.3.0';
 const SAVE_KEY     = 'dragon_cradle_save';
 const BEST_KEY     = SAVE_KEY + '_best';
 const SAVE_VERSION = 3;
@@ -426,9 +426,16 @@ function createBattleScene(p, e) {
   const tw = makeTweener();
 
   function makeFighter(info, x, facing, accent) {
-    const g = rigDragon(buildDragon(info.attr, info.stage, info.type), info.attr);
-    if (info.stage === 'adult') g.scale.setScalar(info.boss ? 1.22 : 1.05);
-    else if (info.boss) g.scale.multiplyScalar(1.2);
+    let g;
+    if (info.species && info.species !== 'dragon') {
+      // ドラゴン以外の敵：レベルが上がるほど少し大きく、ボスはさらに大きく
+      const grow = 1 + Math.min(0.85, (info.level - 1) * 0.024);
+      g = buildEnemy(info.species, { scale: grow * (info.boss ? 1.25 : 1) });
+    } else {
+      g = rigDragon(buildDragon(info.attr, info.stage, info.type), info.attr);
+      if (info.stage === 'adult') g.scale.setScalar(info.boss ? 1.22 : 1.05);
+      else if (info.boss) g.scale.multiplyScalar(1.2);
+    }
     g.rotation.y = facing;
     scene.add(g);
     const ped = buildPedestal(accent, 1.45);
@@ -874,8 +881,10 @@ function startBattle() {
   if (!state.attr || state.stage === 'egg') return;
   const id = ++battleId;
   const level = state.battleLevel;
-  const eAttr = pickEnemyAttr(level);
-  const eStats = calcEnemyStats(level, eAttr);
+  const { species, attr: eAttr } = pickEnemy(level);
+  const eStats = calcEnemyStats(level, eAttr, species);
+  const eName = enemyName(species, eAttr);
+  markSeen(species === 'dragon' ? 'dragon-' + eAttr : species);
   const pStats = playerStats();
   battle = createBattle(
     { attr: state.attr, type: state.dragonType, stats: pStats },
@@ -883,7 +892,7 @@ function startBattle() {
   );
   battleScene = createBattleScene(
     { attr: state.attr, stage: state.stage === 'adult' ? 'adult' : 'baby', type: state.dragonType },
-    { attr: eAttr, stage: eStats.stage, type: level % 4 === 0 ? 'attacker' : 'balanced', boss: eStats.boss },
+    { attr: eAttr, stage: eStats.stage, type: level % 4 === 0 ? 'attacker' : 'balanced', boss: eStats.boss, species, level },
   );
   Stage.set(battleScene);
   battleBusy = true;
@@ -892,7 +901,7 @@ function startBattle() {
   setSigil($('be-sigil'), eAttr);
   $('battle-player-name').textContent = ATTR[state.attr].name;
   $('battle-player-lv').textContent = 'Lv.' + state.level;
-  $('battle-enemy-name').textContent = (eStats.boss ? '主・' : '野生の') + ATTR[eAttr].name;
+  $('battle-enemy-name').textContent = (eStats.boss ? '主・' : species === 'dragon' ? '野生の' : '') + eName;
   const elv = $('battle-enemy-lv');
   elv.textContent = (eStats.boss ? 'BOSS ' : '') + 'Lv.' + level;
   elv.classList.toggle('boss', eStats.boss);
@@ -900,12 +909,18 @@ function startBattle() {
   $('battle-result').classList.add('hidden');
   $('battle-commands').classList.add('hidden');
   $('damage-layer').innerHTML = '';
+  // 新しい戦闘のHPバーは、前の戦闘の値から伸ばさず最初から満タンで出す
+  const hud = document.querySelector('.battle-hud');
+  hud.classList.add('no-anim');
   updateBattleUI();
+  void hud.offsetWidth;
+  requestAnimationFrame(() => hud.classList.remove('no-anim'));
   updateAutoButton();
 
   showScreen('battle');
   Music.play('battle', { boss: eStats.boss, intensity: 0.2, climax: false, danger: 0, tension: 0 });
-  showBanner(eStats.boss ? 'Boss Battle' : 'Battle', eStats.boss ? `Lv.${level} ${ATTR[eAttr].short}の主` : `Lv.${level}`, eStats.boss);
+  showBanner(eStats.boss ? 'Boss Battle' : 'Battle', eStats.boss ? `Lv.${level} ${eName}の主` : `Lv.${level} ${eName}`, eStats.boss);
+  if (eStats.trait) log(`${eName}：${ENEMY_TRAITS[eStats.trait].desc}`, 'gold');
   const mult = getAttrMultiplier(state.attr, eAttr);
   if (mult > 1) log(`相性有利 — ${ATTR[eAttr].short}に強い`, 'good');
   else if (mult < 1) log(`相性不利 — ${ATTR[eAttr].short}に弱い`, 'bad');
@@ -1009,6 +1024,7 @@ async function playEvents(events, id) {
         battleScene.heal(ev.target);
         Music.sfx('heal');
         popNumber(ev.target, '+' + ev.amount, { heal: true });
+        if (ev.target === 'enemy') log(`敵が ${ev.amount} 回復した`, 'bad');
         updateBattleUI();
         await wait(300);
         break;
@@ -1258,6 +1274,7 @@ function updateRecord() {
     bestStreak: Math.max(state.streak, saved.bestStreak || 0),
     totalWin:   Math.max(state.totalWin, saved.totalWin || 0),
     bestLevel:  Math.max(state.battleLevel - 1, saved.bestLevel || 0),
+    seen:       saved.seen || [],
   };
   try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch (e) { /* noop */ }
   return best;
@@ -1266,8 +1283,29 @@ function updateRecord() {
 let resetArmed = false;
 let resetTimer = null;
 
+// 図鑑：出会った敵（竜の卵を変えても引き継ぐ）
+const DEX_KEYS = ENEMY_SPECIES_KEYS.filter(k => k !== 'dragon').concat(ATTR_KEYS.map(a => 'dragon-' + a));
+function markSeen(key) {
+  const best = loadBestRecord();
+  const seen = best.seen || [];
+  if (seen.includes(key)) return;
+  seen.push(key);
+  try { localStorage.setItem(BEST_KEY, JSON.stringify({ ...best, seen })); } catch (e) { /* noop */ }
+}
+function dexLabel(key) {
+  return key.startsWith('dragon-') ? ATTR[key.slice(7)].name : ENEMY_SPECIES[key].name;
+}
+function dexAttr(key) {
+  return key.startsWith('dragon-') ? key.slice(7) : ENEMY_SPECIES[key].attr;
+}
+
 function showRecord() {
   const best = updateRecord();
+  const seen = best.seen || [];
+  $('rec-dex-count').textContent = `${DEX_KEYS.filter(k => seen.includes(k)).length} / ${DEX_KEYS.length}`;
+  $('rec-dex').innerHTML = DEX_KEYS.map(k => seen.includes(k)
+    ? `<span class="dex-chip" style="--c:${ATTR[dexAttr(k)].color}">${dexLabel(k)}</span>`
+    : '<span class="dex-chip unknown">？？？</span>').join('');
   $('rec-best-score').textContent = best.bestScore.toLocaleString();
   $('rec-best-streak').textContent = best.bestStreak;
   $('rec-total-win').textContent = best.totalWin;

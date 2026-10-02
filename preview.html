@@ -42,6 +42,11 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   <button data-pv-stage="adult" class="active">成体</button>
   <span class="pv-spacer"></span>
   <label>タイプ:</label>
+  <label>敵:</label>
+  <select id="pv-enemy-select" title="敵モンスター">
+    <option value="">（ドラゴン）</option>
+  </select>
+  <span class="pv-spacer"></span>
   <select id="pv-type-select" title="育成タイプ選択">
     <option value="balanced">バランス</option>
     <option value="attacker">アタッカー</option>
@@ -88,6 +93,7 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
 <script src="js/music.js"></script>
 <script src="js/models.js"></script>
 <script src="js/rig.js"></script>
+<script src="js/enemies.js"></script>
 
 <!-- プレビュー本体 -->
 <script>
@@ -142,8 +148,9 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
   function loadModel() {
     if (currentModel) { pvScene.remove(currentModel); currentModel = null; }
     const pvType = document.getElementById('pv-type-select').value;
+    const pvEnemy = document.getElementById('pv-enemy-select').value;
     try {
-      currentModel = rigDragon(buildDragon(pvAttr, pvStage, pvType), pvAttr);
+      currentModel = pvEnemy ? buildEnemy(pvEnemy) : rigDragon(buildDragon(pvAttr, pvStage, pvType), pvAttr);
       if (wireframeMode) {
         currentModel.traverse(c => { if (c.isMesh && c.material) c.material.wireframe = true; });
       }
@@ -178,6 +185,16 @@ body { background: #111; color: #fff; font-family: sans-serif; overflow: hidden;
 
   // タイプ選択
   document.getElementById('pv-type-select').addEventListener('change', () => loadModel());
+
+  // 敵モンスターの選択肢
+  const pvEnemySel = document.getElementById('pv-enemy-select');
+  Object.keys(ENEMY_BUILDERS).forEach(k => {
+    const o = document.createElement('option');
+    o.value = k;
+    o.textContent = ENEMY_SPECIES[k].name;
+    pvEnemySel.appendChild(o);
+  });
+  pvEnemySel.addEventListener('change', () => loadModel());
 
   // アクション再生
   document.querySelectorAll('[data-pv-action]').forEach(btn => {

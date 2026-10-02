@@ -143,7 +143,59 @@ function isBossLevel(level) { return level % BOSS_INTERVAL === 0; }
 function difficultyCurve(level) {
   return 0.76 + 0.28 * (1 - Math.exp(-(level - 1) / 10)) + 0.0015 * level;
 }
-function calcEnemyStats(level, attr) {
+// ------------------------------------------------------------
+// 敵の種族：出現レベル・能力の傾向（prof）・クセ（trait）
+//   pw は種族ごとの強さ補正（tools/tune-enemies.js で、ドラゴン相手と同じ勝率になるよう調整）
+// ------------------------------------------------------------
+const ENEMY_TRAITS = {
+  swift:   { label: '素早い',   desc: '素早く、先に動きやすい' },
+  evasive: { label: '回避',     desc: '攻撃をよく避ける' },
+  armored: { label: '硬い',     desc: '通常攻撃が効きにくい（必殺技はよく効く）' },
+  regen:   { label: '再生',     desc: '毎ターンHPを少し回復する' },
+  double:  { label: '連撃',     desc: '通常攻撃が2回攻撃' },
+  charger: { label: '溜め上手', desc: '強攻撃の間隔が短い' },
+  heavy:   { label: '剛撃',     desc: '強攻撃が特に重い' },
+};
+const ENEMY_SPECIES = {
+  dragon:       { name: null,             attr: null,      minLv: 1,  weight: 2, prof: { hp: 1,    atk: 1,    def: 1,    spd: 1    }, trait: null,      pw: 1 },
+  hinoko:       { name: 'ヒノコ',         attr: 'fire',    minLv: 1,  maxLv: 14, prof: { hp: 0.85, atk: 1.05, def: 0.85, spd: 1.3  }, trait: 'swift',   pw: 0.91 },
+  yukidama:     { name: 'ユキダマ',       attr: 'ice',     minLv: 1,  maxLv: 18, prof: { hp: 1.05, atk: 0.9,  def: 1.0,  spd: 0.85 }, trait: 'regen',   pw: 0.77 },
+  piribee:      { name: 'ピリビー',       attr: 'thunder', minLv: 2,  maxLv: 20, prof: { hp: 0.8,  atk: 0.9,  def: 0.85, spd: 1.35 }, trait: 'double',  pw: 1.05 },
+  kageboo:      { name: 'カゲボウ',       attr: 'dark',    minLv: 3,  maxLv: 22, prof: { hp: 0.85, atk: 1.0,  def: 0.9,  spd: 1.2  }, trait: 'evasive', pw: 0.88 },
+  flarebat:     { name: 'フレアバット',   attr: 'fire',    minLv: 4,  maxLv: 30, prof: { hp: 0.9,  atk: 1.0,  def: 0.9,  spd: 1.15 }, trait: 'evasive', pw: 0.84 },
+  yorukinoko:   { name: 'ヨルキノコ',     attr: 'dark',    minLv: 6,  prof: { hp: 1.1,  atk: 0.9,  def: 1.05, spd: 0.85 }, trait: 'regen',   pw: 0.77 },
+  koorigani:    { name: 'コオリガニ',     attr: 'ice',     minLv: 8,  prof: { hp: 1.0,  atk: 0.95, def: 1.4,  spd: 0.7  }, trait: 'armored', pw: 1 },
+  magmaturtle:  { name: 'マグマガメ',     attr: 'fire',    minLv: 10, prof: { hp: 1.2,  atk: 0.95, def: 1.3,  spd: 0.65 }, trait: 'armored', pw: 0.94 },
+  raijuu:       { name: 'ライジュウ',     attr: 'thunder', minLv: 12, prof: { hp: 1.0,  atk: 1.05, def: 1.0,  spd: 1.05 }, trait: 'charger', pw: 0.87 },
+  frostwolf:    { name: 'フロストウルフ', attr: 'ice',     minLv: 14, prof: { hp: 0.9,  atk: 0.95, def: 0.9,  spd: 1.2  }, trait: 'double',  pw: 0.95 },
+  stormbird:    { name: 'ストームバード', attr: 'thunder', minLv: 16, prof: { hp: 0.9,  atk: 1.0,  def: 0.9,  spd: 1.2  }, trait: 'evasive', pw: 0.86 },
+  shadowknight: { name: 'シャドウナイト', attr: 'dark',    minLv: 18, prof: { hp: 1.1,  atk: 1.05, def: 1.2,  spd: 0.8  }, trait: 'heavy',   pw: 0.84 },
+};
+const ENEMY_SPECIES_KEYS = Object.keys(ENEMY_SPECIES);
+
+function enemyName(species, attr) {
+  return ENEMY_SPECIES[species].name || ATTR[attr].name;
+}
+
+// そのLvで出現しうる種族から1体選ぶ。出始めの種族は少し出やすい。ボスは小型以外から
+function pickEnemy(level, rng = Math.random) {
+  const boss = isBossLevel(level);
+  const pool = ENEMY_SPECIES_KEYS.filter(k => {
+    const sp = ENEMY_SPECIES[k];
+    if (level < sp.minLv) return false;
+    if (boss) return !sp.maxLv;
+    return !sp.maxLv || level <= sp.maxLv;
+  });
+  const w = pool.map(k => (ENEMY_SPECIES[k].weight || 1) + (k !== 'dragon' && level - ENEMY_SPECIES[k].minLv < 6 ? 1 : 0));
+  let r = rng() * w.reduce((a, b) => a + b, 0);
+  let species = pool[pool.length - 1];
+  for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r < 0) { species = pool[i]; break; } }
+  const attr = ENEMY_SPECIES[species].attr || ATTR_KEYS[Math.floor(rng() * ATTR_KEYS.length)];
+  return { species, attr };
+}
+
+function calcEnemyStats(level, attr, species = 'dragon') {
+  const sp = ENEMY_SPECIES[species] || ENEMY_SPECIES.dragon;
   const stage = level >= ENEMY_ADULT_LV ? 'adult' : 'baby';
   // 想定される鍛錬量（そのLvまでに標準的なプレイヤーが積む量）
   const expectTrain = Math.max(0, level - 1);
@@ -156,18 +208,21 @@ function calcEnemyStats(level, attr) {
   const s = calcStats({ attr, level, stage, trained });
   const d = difficultyCurve(level);
   const boss = isBossLevel(level);
+  const P = sp.prof;
   return {
-    hp:  Math.round(s.hp * d * (boss ? BOSS_HP_MULT : 1)),
-    atk: Math.round(s.atk * d),
-    def: Math.round(s.def * d),
-    spd: Math.round(s.spd * (0.85 + 0.15 * d)),
+    hp:  Math.round(s.hp * d * (boss ? BOSS_HP_MULT : 1) * P.hp * sp.pw),
+    atk: Math.round(s.atk * d * P.atk),
+    def: Math.round(s.def * d * P.def),
+    spd: Math.round(s.spd * (0.85 + 0.15 * d) * P.spd),
     stage,
     boss,
+    species,
+    trait: sp.trait,
   };
 }
 
 function pickEnemyAttr(level, rng = Math.random) {
-  return ATTR_KEYS[Math.floor(rng() * ATTR_KEYS.length)];
+  return pickEnemy(level, rng).attr;
 }
 
 // ------------------------------------------------------------
@@ -198,7 +253,10 @@ function evadeChance(spdD, spdA) {
 
 // 敵の行動予告：通常は4ターン周期、ボスは3ターン周期で強攻撃（前のターンに予告）
 function enemyIntentFor(battle) {
-  const cycle = battle.enemy.boss ? 3 : 4;
+  const tr = battle.enemy.trait;
+  let cycle = battle.enemy.boss ? 3 : 4;
+  if (tr === 'charger') cycle = Math.max(2, cycle - 1);
+  if (tr === 'heavy') cycle += 1;
   return (battle.turn % cycle === cycle - 1) ? 'heavy' : 'normal';
 }
 
@@ -206,7 +264,7 @@ function createBattle(player, enemy, rng = Math.random) {
   // player: { attr, type, stats }, enemy: { attr, level, stats(incl. boss) }
   const b = {
     player: { ...player, hp: player.stats.hp, maxHp: player.stats.hp },
-    enemy:  { ...enemy,  hp: enemy.stats.hp,  maxHp: enemy.stats.hp, boss: !!enemy.stats.boss, enraged: false },
+    enemy:  { ...enemy,  hp: enemy.stats.hp,  maxHp: enemy.stats.hp, boss: !!enemy.stats.boss, trait: enemy.stats.trait || null, enraged: false },
     mp: MP_START,
     turn: 0,
     exposed: false,  // バーサーク後の無防備状態
@@ -227,7 +285,8 @@ function strike(b, from, power, opts, events) {
   const D = from === 'player' ? b.enemy  : b.player;
   const target = from === 'player' ? 'enemy' : 'player';
   const as = A.stats, ds = D.stats;
-  if (!opts.noEvade && rng() < evadeChance(ds.spd, as.spd)) {
+  const evadeBonus = (target === 'enemy' && b.enemy.trait === 'evasive') ? 0.12 : 0;
+  if (!opts.noEvade && rng() < Math.min(0.32, evadeChance(ds.spd, as.spd) + evadeBonus)) {
     events.push({ type: 'evade', target });
     return 0;
   }
@@ -241,6 +300,8 @@ function strike(b, from, power, opts, events) {
     if (b.guardMult) dmg *= b.guardMult;
     if (b.exposed) dmg *= 1.3;
   }
+  // 硬い敵：通常攻撃は 0.75 倍、必殺技は 1.15 倍
+  if (target === 'enemy' && b.enemy.trait === 'armored') dmg *= opts.special ? 1.15 : 0.75;
   dmg = Math.max(1, Math.round(dmg));
   D.hp = Math.max(0, D.hp - dmg);
   events.push({ type: 'damage', target, amount: dmg, crit, attrMult: mult, heavy: !!opts.heavy, guarded: target === 'player' && !!b.guardMult });
@@ -257,20 +318,20 @@ function playerAct(b, cmd, events) {
     b.mp -= SPECIAL_COST;
     events.push({ type: 'action', who: 'player', cmd, special: type });
     if (type === 'attacker') {
-      strike(b, 'player', 3.0, {}, events);
+      strike(b, 'player', 3.0, { special: true }, events);
       b.exposed = true;
     } else if (type === 'tank') {
-      strike(b, 'player', 1.0, {}, events);
+      strike(b, 'player', 1.0, { special: true }, events);
       const heal = Math.round(b.player.maxHp * 0.12);
       const before = b.player.hp;
       b.player.hp = Math.min(b.player.maxHp, b.player.hp + heal);
       events.push({ type: 'heal', target: 'player', amount: b.player.hp - before });
     } else if (type === 'speedster') {
       for (let i = 0; i < 3 && b.enemy.hp > 0; i++) {
-        strike(b, 'player', 0.85, { critBonus: 0.15 }, events);
+        strike(b, 'player', 0.85, { critBonus: 0.15, special: true }, events);
       }
     } else {
-      strike(b, 'player', 2.5, { ignoreWeak: true }, events);
+      strike(b, 'player', 2.5, { ignoreWeak: true, special: true }, events);
     }
   }
 }
@@ -278,7 +339,14 @@ function playerAct(b, cmd, events) {
 function enemyAct(b, events) {
   const heavy = b.intent === 'heavy';
   events.push({ type: 'action', who: 'enemy', cmd: heavy ? 'heavy' : 'attack' });
-  const power = heavy ? (b.enemy.boss ? 2.3 : 2.0) : 1.0;
+  const tr = b.enemy.trait;
+  if (!heavy && tr === 'double') {
+    strike(b, 'enemy', 0.6, {}, events);
+    if (b.player.hp > 0) strike(b, 'enemy', 0.6, {}, events);
+    return;
+  }
+  let power = heavy ? (b.enemy.boss ? 2.3 : 2.0) : 1.0;
+  if (heavy && tr === 'heavy') power += 0.5;
   strike(b, 'enemy', power, { heavy }, events);
 }
 
@@ -323,6 +391,13 @@ function resolveTurn(b, cmd) {
 
   if (wasExposed) b.exposed = false;  // 無防備は1ターン限り
   b.guardMult = 0;
+
+  // 再生する敵：ターンの終わりに最大HPの6%を回復
+  if (!b.over && b.enemy.trait === 'regen' && b.enemy.hp < b.enemy.maxHp) {
+    const before = b.enemy.hp;
+    b.enemy.hp = Math.min(b.enemy.maxHp, b.enemy.hp + Math.round(b.enemy.maxHp * 0.06));
+    events.push({ type: 'heal', target: 'enemy', amount: b.enemy.hp - before });
+  }
 
   // ボスは HP50% 以下で激昂（ATK+20%）
   if (!b.over && b.enemy.boss && !b.enemy.enraged && b.enemy.hp <= b.enemy.maxHp * 0.5) {
@@ -371,7 +446,8 @@ const BalanceAPI = {
   DRAGON_TYPES, MP_MAX, MP_START, SPECIAL_COST, ENEMY_ADULT_LV,
   trainingCap, trainingEfficiency, rollTrainingMult, calcTrainingGain,
   expToNext, expForWin, decideDragonType, calcStats,
-  isBossLevel, calcEnemyStats, pickEnemyAttr, difficultyCurve,
+  isBossLevel, calcEnemyStats, pickEnemyAttr, pickEnemy, enemyName, difficultyCurve,
+  ENEMY_SPECIES, ENEMY_SPECIES_KEYS, ENEMY_TRAITS,
   getAttrMultiplier, baseDamage, critChance, evadeChance,
   createBattle, resolveTurn, canSpecial, autoCommand, enemyIntentFor,
   scoreForWin,

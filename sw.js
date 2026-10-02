@@ -4,7 +4,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_NAME = 'dragon-cradle-v11';
+const CACHE_NAME = 'dragon-cradle-v12';
 
 const PRECACHE_ASSETS = [
   './',
@@ -15,6 +15,7 @@ const PRECACHE_ASSETS = [
   './js/music.js',
   './js/models.js',
   './js/rig.js',
+  './js/enemies.js',
   './manifest.json',
   './icons/icon-192.png',
   './icons/icon-512.png',

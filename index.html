@@ -249,6 +249,10 @@
         <div class="rec"><span class="rec-label">最高到達</span><span id="rec-best-level" class="rec-val">0</span></div>
       </div>
       <p id="rec-current" class="rec-current"></p>
+      <div class="dex">
+        <div class="dex-head"><span>出会った敵</span><span id="rec-dex-count"></span></div>
+        <div id="rec-dex" class="dex-list"></div>
+      </div>
       <div class="record-actions">
         <button class="ghost-btn" id="btn-back-from-record"><svg><use href="#i-back"/></svg>戻る</button>
         <button class="danger-btn" id="btn-reset">新しい卵から始める</button>
@@ -271,6 +275,7 @@
   <script src="js/music.js"></script>
   <script src="js/models.js"></script>
   <script src="js/rig.js"></script>
+  <script src="js/enemies.js"></script>
   <script src="game.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
