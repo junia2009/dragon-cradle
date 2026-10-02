@@ -45,10 +45,10 @@ function addGrowth(d, pt) {
 
 function fight(d, enemyLevel) {
   const type = B.decideDragonType(d.trainCount);
-  const eAttr = B.pickEnemyAttr(enemyLevel);
+  const { species, attr: eAttr } = B.pickEnemy(enemyLevel);
   const b = B.createBattle(
     { attr: d.attr, type, stats: B.calcStats(d) },
-    { attr: eAttr, level: enemyLevel, stats: B.calcEnemyStats(enemyLevel, eAttr) },
+    { attr: eAttr, level: enemyLevel, stats: B.calcEnemyStats(enemyLevel, eAttr, species) },
   );
   let guard = 0;
   while (!b.over && guard++ < 200) {

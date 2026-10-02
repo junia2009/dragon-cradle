@@ -721,6 +721,7 @@ body.has-stage #stage { opacity: 1; }
 .plate-enemy .hp-ghost, .plate-enemy .hp-fill { left: auto; right: 0; }
 .hp-ghost { background: rgba(255,255,255,0.55); transition: width 0.7s ease 0.35s; }
 .hp-fill { transition: width 0.25s var(--ease), background 0.3s; }
+.battle-hud.no-anim .hp-fill, .battle-hud.no-anim .hp-ghost { transition: none !important; }
 .hp-fill.player { background: linear-gradient(90deg, #3fbf8a, var(--hp-player)); }
 .hp-fill.enemy  { background: linear-gradient(270deg, #c93a4a, var(--hp-enemy)); }
 .hp-fill.low    { background: linear-gradient(90deg, #d33, #ff8a5c); animation: lowPulse 0.9s ease-in-out infinite; }
@@ -1021,7 +1022,21 @@ body.has-stage #stage { opacity: 1; }
 }
 .rec-label { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.08em; }
 .rec-val { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--gold); font-variant-numeric: tabular-nums; }
-.rec-current { font-size: 0.78rem; color: var(--text-2); margin-bottom: 16px; min-height: 1.2em; }
+.rec-current { font-size: 0.78rem; color: var(--text-2); margin-bottom: 12px; min-height: 1.2em; }
+.dex { margin-bottom: 16px; text-align: left; }
+.dex-head { display: flex; justify-content: space-between; font-family: var(--font-ui); font-size: 0.72rem; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 6px; }
+.dex-head span:last-child { color: var(--gold); font-weight: 700; }
+.dex-list { display: flex; flex-wrap: wrap; gap: 5px; }
+.dex-chip {
+  --c: var(--gold);
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-size: 0.7rem;
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+}
+.dex-chip.unknown { color: var(--muted); border-color: var(--line); background: transparent; }
 .record-actions { display: flex; gap: 10px; justify-content: center; }
 
 /* ============================================================
@@ -1101,6 +1116,11 @@ body.has-stage #stage { opacity: 1; }
   .modal-card:has(.levelup:not(.hidden)) .result-title { font-size: 1.6rem; }
   .record-card { padding: 16px 20px; }
   .record-grid { margin: 10px 0 6px; }
+  .rec { padding: 6px 4px; }
+  .rec-val { font-size: 1.1rem; }
+  .rec-current { margin-bottom: 8px; }
+  .dex { margin-bottom: 10px; }
+  .dex-chip { padding: 1px 7px; font-size: 0.64rem; }
 }
 
 @media (max-width: 760px) {
